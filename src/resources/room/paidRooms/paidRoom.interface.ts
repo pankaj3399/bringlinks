@@ -1,0 +1,37 @@
+import mongoose, { Document } from "mongoose";
+
+export interface IPaidRooms extends Document {
+  tickets: Tickets;
+  receiptId?: string[];
+  paidUsers?: mongoose.Types.ObjectId[];
+  roomId: mongoose.Types.ObjectId;
+  refreshToken: string;
+}
+
+export type Tickets = {
+  totalRevenue: number;
+  totalTicketsAvailable: number;
+  totalSold: number;
+  ticketsTotal: number;
+  pricing: PricingTiers[];
+};
+
+export type PricingTiers = {
+  tiers: Tiers;
+  description: string;
+  title: string;
+  total: number;
+  price: number;
+  sold: number;
+  available: number;
+  active: boolean;
+};
+
+export enum Tiers {
+  GA = "General Admission",
+  Early_Bird = "Early Bird",
+  Last_Minute = "Last Minute",
+  Vip = "Vip",
+  Premium_Vip = "Premium Vip",
+  Ultimate_Vip = "Ultimate Vip",
+}

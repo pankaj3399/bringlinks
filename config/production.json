@@ -1,0 +1,21 @@
+{
+    "NODE_ENV": "production",
+    "SaltRounds": 11,
+    "Mongo_User": "yourMongoUser",
+    "Mongo_Pass": "yourMongoPassword",
+    "Mongo_Path": "yourMongoPath",
+    "Jwt_Secret_Key": "yourJwtSecretKey",
+    "Jwt_Secret_Refresh_Key": "yourJwtSecretRefreshKey",
+    "Jwt_Secret_Expiry": "yourJwtSecretExpiry",
+    "Jwt_Refresh_Expiry": "yourJwtRefreshExpiry",
+    "AWS_ACCESS_KEY_ID": "yourAwsAccessKeyId",
+    "AWS_BUCKET_REGION": "yourAwsBucketRegion",
+    "AWS_BUCKET_ROOM_REGION": "yourAwsBucketRoomRegion",
+    "AWS_ACCESS_KEY_ID_ROOM_FLYER": "yourAwsAccessKeyIdRoomFlyer",
+    "AWS_KEY_SECRET_ROOM_FLYER": "yourAwsKeySecretRoomFlyer",
+    "AWS_AVI_BUCKET_NAME_ROOM_FLYER": "yourAwsAviBucketNameRoomFlyer",
+    "AWS_ACCESS_KEY_SECRET": "yourAwsAccessKeySecret",
+    "AWS_AVI_BUCKET_NAME": "yourAwsAviBucketName",
+    "cookie": "yourCookie",
+    "PORT": 8080
+}

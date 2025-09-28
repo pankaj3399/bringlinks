@@ -1,0 +1,42 @@
+{
+  "cSpell.words": [
+    "addadmin",
+    "addedguest",
+    "allrooms",
+    "alphanum",
+    "chatid",
+    "createtoken",
+    "deletepost",
+    "deleteroom",
+    "dsphere",
+    "editcomment",
+    "editpost",
+    "editroom",
+    "fileupload",
+    "followee",
+    "HELCIM",
+    "Iitinerary",
+    "incominginvite",
+    "inviteuser",
+    "keypair",
+    "likeid",
+    "maxlength",
+    "postid",
+    "postliked",
+    "presigner",
+    "removeanadmin",
+    "roomid",
+    "suburan",
+    "unfollow",
+    "uninvite",
+    "uninviteuser",
+    "unliked",
+    "updatepassword",
+    "userid",
+    "userpreferences",
+    "zipcode"
+  ],
+  "rest-client.defaultHeaders": {
+    "User-Agent": "vscode-restclient"
+  }
+}

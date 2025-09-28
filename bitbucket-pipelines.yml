@@ -1,0 +1,85 @@
+image: node:20 # Using Node.js version 18, adjust this to your project's Node version if necessary
+
+definitions:
+  steps:
+    - step: &install-dependencies
+        name: Install dependencies
+        caches:
+          - node
+        script:
+          - npm install --include=dev
+
+    - step: &DevEnvironment-BuildCheck
+        name: Dev Environment - Build Check
+        caches:
+          - node
+        script:
+          - echo "Running build in Dev environment..."
+          - npm run dev
+
+    - step: &upload-to-s3
+        name: Upload Artifacts to S3
+        caches:
+          - node
+        script:
+          - echo "Installing AWS CLI and Terraform..."
+          - apt-get update && apt-get install -y unzip
+          - curl -LO https://releases.hashicorp.com/terraform/1.4.6/terraform_1.4.6_linux_amd64.zip # Adjust to latest version
+          - unzip terraform_1.4.6_linux_amd64.zip
+          - mv terraform /usr/local/bin/
+          - terraform --version
+          - aws --version
+          
+          - echo "Initializing Terraform..."
+          - terraform init  # Initialize Terraform (ensure your configuration files are present)
+          
+          - echo "Applying Terraform configuration...
+          - terraform apply -auto-approve  # Apply the Terraform plan to provision infrastructure
+
+          - echo "Uploading artifacts to S3..."
+          - aws s3 cp ./build s3://bitbucket-pipeline-artifacts/build --recursive
+
+    - step: &build-project
+        name: Build project
+        caches:
+          - node
+        script:
+          - rm -r node_modules
+          - npm install --include=dev
+          - echo "Building project..."
+          - npm run build
+
+    - step: &test-project
+        name: Test project
+        caches:
+          - node
+        script:
+          - echo "Running tests..."
+          - npm test
+
+    - step: &deploy-Prod
+        name: Deploy to Production
+        script:
+          - echo "Deploying to production..."
+          - npm run deploy
+
+    - step: &deploy-Cloud
+        name: Deploy to Cloud
+        script:
+          - echo "Initializing Terraform..."
+          - cd terraform
+          - terraform init
+          - terraform apply -auto-approve
+
+pipelines:
+  default:
+    - step: *install-dependencies
+    - step: *build-project
+
+  custom:
+    manual-production-deploy:
+      - step: *install-dependencies
+      - step: *build-project
+      - step: *upload-to-s3
+      - step: *deploy-Cloud
+      - step: *deploy-Prod
