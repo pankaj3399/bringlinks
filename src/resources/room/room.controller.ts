@@ -244,7 +244,6 @@ class RoomController implements Controller {
         Logging.error(err);
       });
       const url = await getIMG(roomId, fileType as FileType);
-      Logging.log(fileType);
       res.status(201).send({ url });
     } catch (err: any) {
       next(new HttpException(400, err));
@@ -287,7 +286,7 @@ class RoomController implements Controller {
       res.status(200).json(room);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(404, err.messaged);
+      next(new HttpException(404, err.message));
     }
   };
   private getRoomBy = async (
@@ -299,13 +298,13 @@ class RoomController implements Controller {
       const key = Object.keys(req.body)[0];
       const room = await getRoomBy(req.body, key);
 
-      if (!room) res.status(400).send("Room not found");
+      if (!room) return res.status(400).send("Room not found");
 
       Logging.info(room);
       res.status(200).json(room);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(400, err.message);
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -316,12 +315,12 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const allRooms = await getAllRooms();
-      if (!allRooms) res.status(400).send("rooms not found");
+      if (!allRooms) return res.status(400).send("rooms not found");
 
       Logging.info(allRooms);
       res.status(200).json(allRooms);
     } catch (err: any) {
-      new HttpException(400, err.message);
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -333,21 +332,21 @@ class RoomController implements Controller {
     try {
       const { userId } = req.params;
       const { paid } = req.query;
-      if (!userId) res.status(400).send("Id is required");
-      if (paid) res.status(400).send("paid is required");
+      if (!userId) return res.status(400).send("Id is required");
+      if (paid) return res.status(400).send("paid is required");
 
       //create event into room
       const createdRoom = await createRoom(req.body, userId);
-      if (!createdRoom) res.status(400).send(`room couldn't be created`);
+      if (!createdRoom) return res.status(400).send(`room couldn't be created`);
 
       // create qr code for room
       const qrCode = await createRoomQRCode(createdRoom._id);
-      if (!qrCode) res.status(400).send(`qr code couldn't be created`);
+      if (!qrCode) return res.status(400).send(`qr code couldn't be created`);
 
       Logging.info(createdRoom);
       res.status(201).send({ createdRoom, qrCode });
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -358,15 +357,15 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
       const deletedRoom = await deleteRoom(userId, roomId);
 
-      if (!deletedRoom) res.status(400).send("Room not deleted");
+      if (!deletedRoom) return res.status(400).send("Room not deleted");
       Logging.info(deletedRoom);
-      res.status(200);
+      res.status(200).send(deletedRoom);
     } catch (err: any) {
-      new HttpException(400, err.message);
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -377,15 +376,15 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
       const updatedRoom = await updateRoom(req.body, userId, roomId);
-      if (!updatedRoom) res.status(400).send("Room not updated");
+      if (!updatedRoom) return res.status(400).send("Room not updated");
 
       Logging.info(updatedRoom);
-      res.status(201).send(updateRoom);
+      res.status(201).send(updatedRoom);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -396,14 +395,14 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { roomId, adminId } = req.params;
-      if (!adminId || !roomId) res.status(400).send("Id is required");
+      if (!adminId || !roomId) return res.status(400).send("Id is required");
 
       const room = await addAnAdmin(roomId, adminId);
-      if (!room) res.status(400).send("Room admin not added");
+      if (!room) return res.status(400).send("Room admin not added");
 
       res.status(202).send(room);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private incomingInvite = async (
@@ -413,13 +412,13 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
       const room = await incomingInvite(userId, roomId);
-      if (!room) res.status(400).send("Room invite not sent");
+      if (!room) return res.status(400).send("Room invite not sent");
       res.status(201).send(room);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -431,15 +430,15 @@ class RoomController implements Controller {
     try {
       const { roomQuery } = req.query;
       if (!roomQuery)
-        res.status(400).send("roomQuery text for search is required");
+        return res.status(400).send("roomQuery text for search is required");
 
       const foundedRooms = await getRoomsByText(roomQuery as string);
-      if (!foundedRooms) res.status(400).send({ message: "Room not found" });
+      if (!foundedRooms) return res.status(400).send({ message: "Room not found" });
 
       Logging.info(foundedRooms);
       res.status(200).json(foundedRooms);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private getRelatedRooms = async (
@@ -449,15 +448,15 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const foundedRooms = await getRelatedRooms(userId);
-      if (!foundedRooms) res.status(400).send({ message: "Room not found" });
+      if (!foundedRooms) return res.status(400).send({ message: "Room not found" });
 
       Logging.info(foundedRooms);
       res.status(200).json(foundedRooms);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -469,14 +468,14 @@ class RoomController implements Controller {
     try {
       const { roomId } = req.params;
       const { inviteeId } = req.query;
-      if (!inviteeId || !roomId) res.status(400).send("Id is required");
+      if (!inviteeId || !roomId) return res.status(400).send("Id is required");
 
       const room = await inviteAUser(roomId, inviteeId as string);
 
-      if (!room) res.status(400).send("Room invite not sent");
+      if (!room) return res.status(400).send("Room invite not sent");
       res.status(200).send(room);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -489,15 +488,15 @@ class RoomController implements Controller {
       const { roomId } = req.params;
       const { inviteeId } = req.query;
 
-      if (!inviteeId || !roomId) res.status(400).send("Id is required");
+      if (!inviteeId || !roomId) return res.status(400).send("Id is required");
 
       const modifiedCount = await unInviteAUser(inviteeId as string, roomId);
 
-      if (modifiedCount === 0) res.status(200).send(modifiedCount);
+      if (modifiedCount === 0) return res.status(200).send(modifiedCount);
 
-      if (modifiedCount === 1) res.status(201).send(modifiedCount);
+      if (modifiedCount === 1) return res.status(201).send(modifiedCount);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -508,13 +507,13 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
       const room = await removeAnAdmin(userId, roomId);
-      if (!room) res.status(400).send("Room not deleted");
+      if (!room) return res.status(400).send("Room not deleted");
       res.status(201).send(room);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private acceptRoomInvite = async (
@@ -524,13 +523,13 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
       const room = await acceptRoomInvite(userId, roomId);
-      if (!room) res.status(400).send("Room invite not accepted");
+      if (!room) return res.status(400).send("Room invite not accepted");
       res.status(200).send(room);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private getRoomNearby = async (
@@ -541,17 +540,16 @@ class RoomController implements Controller {
     try {
       const { userId } = req.params;
       const { lng, ltd } = req.query;
-      Logging.log(`Longitude: ${lng}, Latitude: ${ltd}`);
-      if (!userId) res.status(400).send("User Id is required");
-      if (!lng && !ltd) res.status(400).send("Location is needed");
+      if (!userId) return res.status(400).send("User Id is required");
+      if (!lng && !ltd) return res.status(400).send("Location is needed");
 
       const nearByRooms = await roomsNearBy(userId, Number(lng), Number(ltd));
-      if (!nearByRooms) res.status(200).send(`rooms couldn't be found`);
+      if (!nearByRooms) return res.status(200).send(`rooms couldn't be found`);
 
       Logging.info(nearByRooms);
       res.status(201).json(nearByRooms);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private getAllRoomsPaginated = async (
@@ -561,24 +559,20 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { page, limit } = req.query;
-      if (!page) throw new Error("Page is needed");
-      if (!limit) throw new Error("Limit is needed");
+      if (!page) return res.status(400).send("Page is needed");
+      if (!limit) return res.status(400).send("Limit is needed");
 
-      Logging.log(`the limit is ${limit}`);
-      Logging.log(`the page is ${page}`);
       const limitNum = Number(limit);
       const pageNum = Number(page);
       // Calculate the number of documents to skip
       const skip = limitNum * (pageNum - 1);
-      Logging.log(`the skip is ${skip}`);
-      Logging.log(pageNum);
       const paginatedRooms = await roomsGetallPaginated(skip, limitNum);
-      if (!paginatedRooms) res.status(400).send(`room couldn't be found`);
+      if (!paginatedRooms) return res.status(400).send(`room couldn't be found`);
 
       Logging.info(paginatedRooms);
       res.status(200).json(paginatedRooms);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
   private getRoomNearbyPaginated = async (
@@ -589,11 +583,10 @@ class RoomController implements Controller {
     try {
       const { userId } = req.params;
       const { lng, ltd, page, limit } = req.query;
-      Logging.log(`Longitude: ${lng}, Latitude: ${ltd}`);
-      if (!userId) res.status(400).send("User Id is required");
-      if (!lng && !ltd) res.status(400).send("Location is needed");
-      if (!page) res.status(400).send("Page is needed");
-      if (!limit) res.status(400).send("Limit is needed");
+      if (!userId) return res.status(400).send("User Id is required");
+      if (!lng && !ltd) return res.status(400).send("Location is needed");
+      if (!page) return res.status(400).send("Page is needed");
+      if (!limit) return res.status(400).send("Limit is needed");
 
       const limitNum = Number(limit);
       const pageNum = Number(page);
@@ -607,12 +600,12 @@ class RoomController implements Controller {
         skip,
         limitNum
       );
-      if (!nearByRooms) res.status(400).send(`room couldn't be found`);
+      if (!nearByRooms) return res.status(400).send(`room couldn't be found`);
 
       Logging.info(nearByRooms);
       res.status(201).json(nearByRooms);
     } catch (err: any) {
-      new HttpException(401, err.message);
+      next(new HttpException(401, err.message));
     }
   };
 
@@ -639,9 +632,8 @@ class RoomController implements Controller {
       const { roomId } = req.params;
       const { fileType } = req.query;
 
-      Logging.log(req.files);
-      if (!req.files) res.status(400).send({ message: "No files uploaded" });
-      if (!fileType) res.status(400).send({ message: "No file type" });
+      if (!req.files) return res.status(400).send({ message: "No files uploaded" });
+      if (!fileType) return res.status(400).send({ message: "No file type" });
 
       const { flyer, venue, venueVerification } = req.files as {
         flyer?: UploadedFile;
@@ -726,14 +718,14 @@ class RoomController implements Controller {
       const { addedguest } = req.query;
 
       if (!userId || !roomId || !addedguest)
-        res.status(400).send("Id is required");
+        return res.status(400).send("Id is required");
 
-      const user_Id = new toId(addedguest as string);
-      const room_Id = new toId(roomId);
+      const user_Id = addedguest as string;
+      const room_Id = roomId as string;
 
       const addedGuest = await addSpecialGuest(userId, {
-        userId: user_Id,
-        roomId: room_Id,
+        userId: new mongoose.Types.ObjectId(user_Id) as any,
+        roomId: new mongoose.Types.ObjectId(room_Id) as any,
         name: req.body.name,
         type: req.body.type,
       });
@@ -756,11 +748,11 @@ class RoomController implements Controller {
       const { addedguest } = req.query;
 
       if (!userId || !roomId || !addedguest)
-        res.status(400).send("Id is required");
+        return res.status(400).send("Id is required");
 
       const addedGuest = await addSponsor(userId, roomId, req.body);
 
-      if (!addedGuest) res.status(400).send({ message: "Sponsor not added" });
+      if (!addedGuest) return res.status(400).send({ message: "Sponsor not added" });
 
       res.status(201).send(addedGuest);
     } catch (err: any) {

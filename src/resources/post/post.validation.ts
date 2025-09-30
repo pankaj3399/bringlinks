@@ -2,7 +2,14 @@ import Joi from "joi";
 import { ObjectId } from "mongoose";
 
 const createPost = Joi.object().keys({
-  content: Joi.string<string>().min(0).max(200).required(),
+  content: Joi.string<string>().min(1).max(200).required(),
+  postedLocation: Joi.object()
+    .keys({
+      type: Joi.string().valid("Point").optional(),
+      coordinates: Joi.array().items(Joi.number()).length(2).required(),
+      venue: Joi.string().optional(),
+    })
+    .required(),
 });
 
 const updatePost = Joi.object().keys({

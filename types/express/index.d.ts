@@ -1,5 +1,5 @@
 import { IRooms } from "resources/room/room.interface";
-import { IUserDocument } from "resources/user/user.interface";
+import { IRoles } from "resources/user/user.interface";
 
 type PaidRoomRequestType = {
   roomId: string;
@@ -16,8 +16,14 @@ type WalletRequestType = {
 
 declare global {
   namespace Express {
+    interface User {
+      _id: string;
+      role?: IRoles;
+      name?: string;
+      email?: string;
+    }
+
     interface Request {
-      user?: Partial<IUserDocument>; // Adding the optional 'user' property to the Request interface
       paidRoom?: PaidRoomRequestType;
       wallet?: WalletRequestType;
     }

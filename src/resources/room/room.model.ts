@@ -98,7 +98,7 @@ const RoomSchema = new Schema<IRoomsDocument>(
         required: true,
       },
       venue: { type: String },
-    },
+    } as any,
     event_description: {
       type: String,
       trim: true,
@@ -284,7 +284,7 @@ RoomSchema.index({ _id: 1, event_PendingRequests: 1 });
 RoomSchema.index({ _id: 1, event_invitees: 1 });
 
 RoomSchema.statics.findRoomById = function (_id: string) {
-  return this.findOne({ _id }).select;
+  return this.findOne({ _id });
 };
 
 RoomSchema.statics.findRoomByName = function (roomName: string) {

@@ -6,6 +6,13 @@ export interface IUsers extends Document {
   profile: IUserProfile;
   role: IRoles;
   refreshToken: string;
+  phoneNumber?: string;
+  state?: string;
+  otp?: string;
+  otpExpiry?: Date;
+  isVerified?: boolean;
+  appleId?: string;
+  googleId?: string;
   pendingRoomsRequest: mongoose.Types.ObjectId[];
   enteredRooms: mongoose.Types.ObjectId[];
   userPreferences: IUserPreferences;

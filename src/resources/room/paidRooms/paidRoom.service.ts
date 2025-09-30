@@ -3,7 +3,6 @@ import Rooms from "../room.model";
 import PaidRoom from "./paidRoom.model";
 import { IPaidRooms } from "./paidRoom.interface";
 import mongoose from "mongoose";
-var toId = mongoose.Types.ObjectId;
 
 export const getPaidRoom = async (roomId: string) => {
   try {
@@ -31,8 +30,8 @@ export const buyTickets = async (
   receiptId: string
 ) => {
   try {
-    const room_Id = new toId(paidRoom.roomId);
-    const user_Id = new toId(userId);
+    const room_Id = paidRoom.roomId?.toString() as string;
+    const user_Id = userId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
     if (!foundRoom || !foundRoom.paid) throw new Error("Room not found");
@@ -119,7 +118,7 @@ export const updatePaidRoom = async (room: IPaidRooms) => {
 
 export const deletePaidRoom = async (roomId: string) => {
   try {
-    const roomIdToDelete = new toId(roomId);
+    const roomIdToDelete = roomId as string;
     const foundRoom = await Rooms.findById(roomIdToDelete);
     if (!foundRoom) throw new Error("Paid room not found");
 
@@ -144,8 +143,8 @@ export const deletePaidRoom = async (roomId: string) => {
 // reflect when a user ask for a refund
 export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   try {
-    const room_Id = new toId(paidRoom.roomId);
-    const user_Id = new toId(userId);
+    const room_Id = paidRoom.roomId?.toString() as string;
+    const user_Id = userId as string;
 
     const foundRoom = await PaidRoom.updateOne(
       {
@@ -203,7 +202,7 @@ export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
 
 export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
   try {
-    const room_Id = new toId(roomId);
+    const room_Id = roomId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
     if (!foundRoom) throw new Error("Room not found");
@@ -232,7 +231,7 @@ export const createPaidRoom = async (
   paidRoom: Partial<IPaidRooms>
 ) => {
   try {
-    const room_Id = new toId(roomId);
+    const room_Id = roomId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
     if (!foundRoom) throw new Error("Room not found");

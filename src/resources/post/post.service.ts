@@ -7,7 +7,6 @@ import { IComments } from "../comments/comments.interface";
 import Comments from "../comments/comments.model";
 import User from "../user/user.model";
 import { CurrentLo } from "resources/user/user.interface";
-var toId = mongoose.Types.ObjectId;
 
 const getAPostById = async (_id: string, user_id: string) => {
   try {
@@ -31,7 +30,7 @@ const getNearPost = async (
   location: Pick<CurrentLo, "type" | "coordinates">
 ) => {
   try {
-    const user_id = new toId(userId);
+    const user_id = userId as string;
     if (!user_id) throw new Error("User not found");
 
     const user = await User.findByIdAndUpdate(
@@ -45,21 +44,21 @@ const getNearPost = async (
     if (!user) throw new Error("User not found");
     const convertRadius = user.profile.location.radiusPreference * 1609.34;
 
-    const nearPost = await Posts.find({
-      $geoNear: {
-        near: {
-          type: "Point",
-          coordinates: user.profile.location.currentLocation.coordinates,
+    const [lng, lat] = user.profile.location.currentLocation.coordinates;
+
+    const nearPost = await Posts.aggregate([
+      {
+        $geoNear: {
+          near: { type: "Point", coordinates: [lng, lat] },
+          distanceField: "distance",
+          spherical: true,
+          maxDistance: convertRadius,
+          key: "postedLocation",
         },
-        distanceField: "distance",
-        spherical: true,
-        maxDistance: convertRadius,
       },
-    });
+    ]);
 
-    if (!nearPost) throw new Error("Post not found");
-
-    return nearPost;
+    return nearPost ?? [];
   } catch (err: any) {
     Logging.error(err);
   }
@@ -67,10 +66,13 @@ const getNearPost = async (
 
 const createAPost = async (post: IPostDocument, user_id: string) => {
   try {
-    const createdPost = await Posts.create(post);
+    const createdPost = await Posts.create({
+      ...post,
+      user_Id: user_id,
+    } as any);
     if (!createdPost) throw new Error("Post is not created");
 
-    const user = new toId(user_id);
+    const user = user_id as string;
 
     const updatedPost = await Posts.findByIdAndUpdate(createdPost._id, {
       $set: {
@@ -99,13 +101,13 @@ const createAPost = async (post: IPostDocument, user_id: string) => {
 
 const deleteAPost = async (user_id: string, post_id: string) => {
   try {
-    const userId = new toId(user_id);
-    const postid = new toId(post_id);
+    const userId = user_id as string;
+    const postid = post_id as string;
 
-    const foundPost = await Posts.findOne(postid);
+    const foundPost = await Posts.findOne({ _id: postid });
     if (!foundPost) throw new Error("post not found");
 
-    if (!foundPost.user_Id?.equals(userId))
+    if (foundPost.user_Id?.toString() !== userId)
       throw new Error("Post does not belong to user");
 
     const deletedPost = await Posts.deletePostById(post_id);
@@ -127,8 +129,8 @@ const deleteAPost = async (user_id: string, post_id: string) => {
 
 const updatePost = async (post: Partial<IPostDocument>) => {
   try {
-    const userId = new toId(post.user_Id);
-    if (!post.user_Id?.equals(userId))
+    const userId = post.user_Id?.toString();
+    if (!userId || post.user_Id?.toString() !== userId)
       throw new Error("Post does not belong to user");
 
     const foundPost = await Posts.findByIdAndUpdate(
@@ -158,8 +160,8 @@ const updatePost = async (post: Partial<IPostDocument>) => {
 
 const likeAPost = async (post_id: string, user_id: string) => {
   try {
-    const likedUserId = new toId(user_id);
-    const postId = new toId(post_id);
+    const likedUserId = new mongoose.Types.ObjectId(user_id);
+    const postId = new mongoose.Types.ObjectId(post_id);
 
     const like = await Likes.create({
       posts: postId,
@@ -194,8 +196,9 @@ const unLikeAPost = async (
   like_id: string
 ) => {
   try {
-    const likeId = new toId(like_id);
-    const postId = new toId(post_id);
+    const likeId = new mongoose.Types.ObjectId(like_id);
+    const postId = new mongoose.Types.ObjectId(post_id);
+    const userId = new mongoose.Types.ObjectId(user_id);
 
     //find if user_id is the save liked id or postlikedID
     const foundLikes = await Likes.findById({ _id: likeId });
@@ -213,7 +216,7 @@ const unLikeAPost = async (
 
     const like = await Likes.findOneAndDelete({
       _id: likeId,
-      user_Id: user_id,
+      user_Id: userId,
       posts: postId,
     });
 
@@ -229,8 +232,8 @@ const comment = async (
   comment: Partial<IComments>
 ) => {
   try {
-    const postId = new toId(post_id);
-    const userId = new toId(userid);
+    const postId = new mongoose.Types.ObjectId(post_id);
+    const userId = new mongoose.Types.ObjectId(userid);
 
     const createdComment = await Comments.create({
       content: comment.content,
@@ -256,8 +259,8 @@ const comment = async (
 
 const deleteComment = async (post_id: string, comment_id: string) => {
   try {
-    const postId = new toId(post_id);
-    const commentId = new toId(comment_id);
+    const postId = new mongoose.Types.ObjectId(post_id);
+    const commentId = new mongoose.Types.ObjectId(comment_id);
 
     await Comments.deleteOne({ _id: commentId }).clone();
 
@@ -283,8 +286,8 @@ const editComment = async (
   userid: string
 ) => {
   try {
-    const postId = new toId(post_id);
-    const userId = new toId(userid);
+    const postId = new mongoose.Types.ObjectId(post_id);
+    const userId = new mongoose.Types.ObjectId(userid);
 
     const updatedComment = await Comments.findByIdAndUpdate(
       { _id: comment._id, post_Id: postId, user_id: userId },

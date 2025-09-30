@@ -19,10 +19,9 @@ import { createPaidRoom } from "./paidRooms/paidRoom.service";
 import QRCode from "qrcode";
 import { validateEnv } from "../../../config/validateEnv";
 
-var toId = mongoose.Types.ObjectId;
 
 const getARoom = async (id: string) => {
-  const _id = new toId(id);
+  const _id = id as string;
   try {
     const foundedRoom = await Rooms.findById(_id);
 
@@ -35,7 +34,7 @@ const getARoom = async (id: string) => {
 };
 
 const getRoomBy = async (room: IRoomsDocument, path: string) => {
-  const _id = new toId(room._id);
+  const _id = room._id as string;
   try {
     const foundedRoom = await Rooms.find({
       $or: [
@@ -99,7 +98,7 @@ const createRoom = async (
   paidRoom: Partial<IPaidRooms | undefined> = undefined
 ) => {
   try {
-    const created_user = new toId(user_id);
+    const created_user = user_id as string;
 
     const foundRoom = await Rooms.findOne({
       event_location_address: {
@@ -119,8 +118,43 @@ const createRoom = async (
         select: "_id",
       });
 
+    // normalize event_admin and dates before create
+    const toObjectIdArray = (value: unknown): mongoose.Types.ObjectId[] => {
+      if (!value) return [];
+      const arr = Array.isArray(value) ? value : [value];
+      return arr
+        .filter(Boolean)
+        .map((v) => new mongoose.Types.ObjectId(String(v)));
+    };
+
+    const parseDdmmyyyy = (v?: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const s = String(v).trim();
+      // Accept DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
+      const m = s.match(/^([0]?[1-9]|[1|2][0-9]|3[0|1])[./-]([0]?[1-9]|1[0-2])[./-]([0-9]{4}|[0-9]{2})$/);
+      if (m) {
+        const d = parseInt(m[1], 10);
+        const mo = parseInt(m[2], 10) - 1; // zero-based
+        const y = parseInt(m[3].length === 2 ? `20${m[3]}` : m[3], 10);
+        return new Date(Date.UTC(y, mo, d, 0, 0, 0));
+      }
+      // Fallback: let Date try to parse ISO or millis
+      const dt = new Date(s);
+      return isNaN(dt.getTime()) ? undefined : dt;
+    };
+
+    const sanitized: Partial<IRoomsDocument> = {
+      ...room,
+      event_admin: toObjectIdArray((room as any).event_admin),
+      event_invitees: toObjectIdArray((room as any).event_invitees),
+      event_schedule: {
+        startDate: parseDdmmyyyy((room as any).event_schedule?.startDate) as any,
+        endDate: parseDdmmyyyy((room as any).event_schedule?.endDate) as any,
+      } as any,
+    };
+
     // create a room
-    const createdRoom = await Rooms.create(room);
+    const createdRoom = await Rooms.create(sanitized);
     if (!createRoom) throw new Error("Room is not created");
 
     await Rooms.updateOne(
@@ -214,9 +248,9 @@ export const addSpecialGuest = async (
   addedGuest: Pick<SpecialGuestType, "userId" | "roomId" | "name" | "type">
 ) => {
   try {
-    const roomId = new toId(addedGuest.roomId);
-    const adminId = new toId(user_Id);
-    const userId = new toId(addedGuest.userId);
+    const roomId = String(addedGuest.roomId);
+    const adminId = user_Id as string;
+    const userId = String(addedGuest.userId);
 
     const foundedRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId, event_admin: adminId },
@@ -245,8 +279,8 @@ export const addSponsor = async (
   sponsor: sponsorType
 ) => {
   try {
-    const roomId = new toId(room_Id);
-    const userId = new toId(user_Id);
+    const roomId = room_Id as string;
+    const userId = user_Id as string;
 
     const foundRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId, event_admin: userId },
@@ -267,7 +301,7 @@ export const addSponsor = async (
 // check if User Preferences matches with the room type and text description and in the same city
 export const getRelatedRooms = async (user_id: string) => {
   try {
-    const userId = new toId(user_id);
+    const userId = user_id as string;
 
     const foundedUser = await User.findById(userId).select(
       "-auth.password -role -refreshToken"
@@ -299,8 +333,8 @@ export const getRelatedRooms = async (user_id: string) => {
 
 const deleteRoom = async (user_id: string, room_id: string) => {
   try {
-    const roomId = new toId(room_id);
-    const userId = new toId(user_id);
+    const roomId = room_id as string;
+    const userId = user_id as string;
 
     const deletedRoom = await Rooms.findByIdAndUpdate(room_id, {
       deleteAt: Date.now() + 90 * 24 * 60 * 60 * 1000,
@@ -328,7 +362,7 @@ const updateRoom = async (
   room_id: string
 ) => {
   try {
-    const created_user = new toId(user_id);
+    const created_user = user_id as string;
 
     const foundedRoom = await Rooms.findByIdAndUpdate({ _id: room_id }, room);
     if (!foundedRoom) throw new Error("Room not found");
@@ -341,7 +375,7 @@ const updateRoom = async (
         }
       );
     }
-    foundedRoom.created_user = created_user;
+    foundedRoom.created_user = new mongoose.Types.ObjectId(created_user) as any;
     if (!updateRoom) throw new Error("Room did not update");
 
     return foundedRoom.populate({
@@ -356,7 +390,7 @@ const updateRoom = async (
 };
 const addAnAdmin = async (room_id: string, newAdmin: string) => {
   try {
-    const roomId = new toId(room_id);
+    const roomId = room_id as string;
 
     const foundedRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId },
@@ -389,8 +423,8 @@ const addAnAdmin = async (room_id: string, newAdmin: string) => {
 };
 const removeAnAdmin = async (user_id: string, room_id: string) => {
   try {
-    const roomId = new toId(room_id);
-    const userId = new toId(user_id);
+    const roomId = room_id as string;
+    const userId = user_id as string;
 
     const foundedRoom = await Rooms.findRoomById(room_id);
     if (!foundedRoom) throw new Error("Room not found");
@@ -411,8 +445,8 @@ const removeAnAdmin = async (user_id: string, room_id: string) => {
 };
 const inviteAUser = async (room_id: string, inviteeId: string) => {
   try {
-    const invitee_Id = new toId(inviteeId);
-    const roomId = new toId(room_id);
+    const invitee_Id = inviteeId as string;
+    const roomId = room_id as string;
 
     const foundedRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId },
@@ -444,8 +478,8 @@ const inviteAUser = async (room_id: string, inviteeId: string) => {
 };
 const unInviteAUser = async (inviteeId: string, room_id: string) => {
   try {
-    const roomId = new toId(room_id);
-    const userId = new toId(inviteeId);
+    const roomId = room_id as string;
+    const userId = inviteeId as string;
 
     const foundedRoom = await Rooms.findRoomById(room_id);
     if (!foundedRoom) throw new Error("Room not found");
@@ -483,8 +517,8 @@ const unInviteAUser = async (inviteeId: string, room_id: string) => {
 };
 const acceptRoomInvite = async (user_id: string, room_id: string) => {
   try {
-    const userId = new toId(user_id);
-    const roomId = new toId(room_id);
+    const userId = user_id as string;
+    const roomId = room_id as string;
 
     const updatedRoom = await Rooms.updateMany(
       { _id: roomId },
@@ -537,9 +571,9 @@ export const roomsNearByPaginated = async (
   limit: number
 ) => {
   try {
-    const userId = new toId(user_id);
+    const userId = user_id as string;
 
-    const foundedUser = await User.findOne(userId).clone();
+    const foundedUser = await User.findOne({ _id: userId }).clone();
 
     if (!foundedUser?.profile.location.radiusPreference) {
       throw new Error("radius preference is needed");
@@ -573,9 +607,9 @@ export const roomsNearByPaginated = async (
 
 const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
   try {
-    const userId = new toId(user_id);
+    const userId = user_id as string;
 
-    const foundedUser = await User.findOne(userId).clone();
+    const foundedUser = await User.findOne({ _id: userId }).clone();
 
     if (!foundedUser?.profile.location.radiusPreference) {
       throw new Error("radius preference is needed");
@@ -617,8 +651,8 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
 };
 export const incomingInvite = async (user_id: string, room_id: string) => {
   try {
-    const userId = new toId(user_id);
-    const roomId = new toId(room_id);
+    const userId = user_id as string;
+    const roomId = room_id as string;
 
     const foundedRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId },
@@ -641,8 +675,8 @@ export const incomingInvite = async (user_id: string, room_id: string) => {
 };
 export const getIMG = async (id: string, fileType?: FileType) => {
   try {
-    const _id = new toId(id);
-    const foundRoom = await Rooms.findOne(_id)
+    const _id = id as string;
+    const foundRoom = await Rooms.findOne({ _id })
       .clone()
       .catch((err) => {
         throw err;
@@ -756,7 +790,7 @@ export const addVenueVerificationIMG = async (
   fileName: string
 ) => {
   try {
-    const roomId = new toId(room_Id);
+    const roomId = room_Id as string;
     const foundRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId },
       {
@@ -777,7 +811,7 @@ export const addVenueVerificationIMG = async (
 
 export const addFlyerIMG = async (room_Id: string, fileName: string) => {
   try {
-    const roomId = new toId(room_Id);
+    const roomId = room_Id as string;
     const foundRoom = await Rooms.findByIdAndUpdate(
       { _id: roomId },
       {

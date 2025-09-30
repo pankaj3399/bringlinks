@@ -2,20 +2,15 @@ import * as Joi from "joi";
 import { IWalletDocument } from "./wallet.interface";
 
 const cardSchema = Joi.object().keys({
-  cardNumber: Joi.string<string>().pattern(new RegExp(/^\d{13,19}$/)),
-  cardHolder: Joi.string<string>().required(),
-  cvv: Joi.string<string>().required(),
-  expirationMonth: Joi.string<string>().pattern(new RegExp(/^\d{1,2}$/)),
-  expirationYear: Joi.string<string>().pattern(new RegExp(/^\d{4}$/)),
+  token: Joi.string<string>().required(),
+  last4: Joi.string<string>().required(),
+  accountHolder: Joi.string<string>().required(),
 });
 
 const bankSchema = Joi.object().keys({
   accountHolder: Joi.string<string>().required(),
-  accountType: Joi.string<string>().required(),
-  bankAccountNumber: Joi.string<string>().pattern(new RegExp(/^\d{4,17}$/)),
-  bankRoutingNumber: Joi.string<string>()
-    .pattern(new RegExp(/^[0-9]{9}$/))
-    .required(),
+  token: Joi.string<string>().optional(),
+  last4: Joi.string<string>().required(),
 });
 
 const createWallet = Joi.object<IWalletDocument>().keys({

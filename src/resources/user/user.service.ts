@@ -1,4 +1,5 @@
-import User, { UserCompare } from "./user.model";
+import User from "./user.model";
+import bcryptUtil from "../../utils/bcrypt";
 import {
   bookmarkType,
   IRoles,
@@ -13,7 +14,6 @@ import mongoose from "mongoose";
 import { getSignedUrl } from "@aws-sdk/cloudfront-signer";
 import { deleteAviIMG, retrieveIMG } from "../../utils/ImageServices/user.Img";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
-var toId = mongoose.Types.ObjectId;
 
 const getUserUsername = async (username: string) => {
   try {
@@ -57,6 +57,7 @@ const refreshTokenUser = async (token: string, userId: string) => {
     return { newToken, freshToken };
   } catch (err) {
     Logging.error(err);
+    throw err; // Re-throw the error so the controller can handle it
   }
 };
 const registerUser = async (user: IUserDocument) => {
@@ -81,7 +82,7 @@ const registerUser = async (user: IUserDocument) => {
       email: user.auth.email,
     });
 
-    const createdUserId = new toId(createdUser._id);
+    const createdUserId = createdUser._id as string;
 
     const userWithoutPassword = await User.findByIdAndUpdate(
       { _id: createdUserId },
@@ -97,7 +98,7 @@ const registerUser = async (user: IUserDocument) => {
 
     if (!userWithoutPassword) throw new Error("User not found");
 
-    return [userWithoutPassword, token];
+    return [userWithoutPassword, token, refreshToken];
   } catch (err: any) {
     Logging.error(err.message);
     Logging.error(err.message);
@@ -115,7 +116,7 @@ const loginUser = async (user: IUserDocument) => {
     }
     Logging.info(password);
     Logging.info(foundUser.auth.password);
-    const checkedPassword: boolean = await UserCompare.comparePass(
+    const checkedPassword: boolean = await bcryptUtil.compare(
       password,
       foundUser.auth.password
     );
@@ -168,10 +169,10 @@ const loginUser = async (user: IUserDocument) => {
 
         if (!updatedUser) throw new Error("User not updated");
         Logging.log(updatedUser.profile.avi.aviUrl);
-        return [updatedUser, token];
+        return [updatedUser, token, refreshToken];
       }
     }
-    return [userWithoutPassword, token];
+    return [userWithoutPassword, token, refreshToken];
   } catch (err: any) {
     Logging.error(err);
     throw err;
@@ -183,7 +184,7 @@ export const updateUserPreferences = async (
 ) => {
   try {
     Logging.log(`from update: \n ${JSON.stringify(userPreferences)}`);
-    const userId = new toId(_id);
+    const userId = _id as string;
     const updatedUser = await User.findByIdAndUpdate(
       { _id: userId },
       {
@@ -239,12 +240,12 @@ export const updateUser = async (
   userId: string
 ) => {
   try {
-    const user_id = new toId(userId);
+    const user_id = userId as string;
     const foundedUser = await User.findById(user_id);
 
     if (!foundedUser) throw new Error("User is not found");
 
-    const updatedUser = await User.findByIdAndUpdate({ _id: user._id }, user, {
+    const updatedUser = await User.findByIdAndUpdate({ _id: user_id }, user, {
       new: true,
     }).select("-auth.password -role -refreshToken");
 
@@ -261,7 +262,7 @@ export const removeBookmark = async (
   bookmark: bookmarkType
 ) => {
   try {
-    const userIdToFind = new toId(userId);
+    const userIdToFind = userId as string;
     const foundUser = await User.findById(userIdToFind);
     if (!foundUser) throw new Error("User not found");
 
@@ -287,7 +288,7 @@ export const removeBookmark = async (
 
 export const getUserBookmarks = async (userId: string) => {
   try {
-    const userIdToFind = new toId(userId);
+    const userIdToFind = userId as string;
     const foundUser = await User.findById(userIdToFind);
     if (!foundUser) throw new Error("User not found");
 
@@ -300,7 +301,7 @@ export const getUserBookmarks = async (userId: string) => {
 
 export const addBookmark = async (userId: string, bookmark: bookmarkType) => {
   try {
-    const userIdToFind = new toId(userId);
+    const userIdToFind = userId as string;
     const foundUser = await User.findById(userIdToFind);
     if (!foundUser) throw new Error("User not found");
 
@@ -326,8 +327,8 @@ export const addBookmark = async (userId: string, bookmark: bookmarkType) => {
 
 const followerAUser = async (followee_id: string, user_id: string) => {
   try {
-    const followeeId = new toId(followee_id);
-    const userId = new toId(user_id);
+    const followeeId = followee_id as string;
+    const userId = user_id as string;
 
     const foundUser = await User.findUserById(followee_id);
     if (!foundUser) throw new Error("User is not found");
@@ -362,7 +363,7 @@ const followerAUser = async (followee_id: string, user_id: string) => {
 };
 const getSchedule = async (user_Id: string) => {
   try {
-    const userId = new toId(user_Id);
+    const userId = user_Id as string;
     const foundUser = await User.findById(userId)
       .select("-auth.password -role -refreshToken")
       .exec();
@@ -380,8 +381,8 @@ const getSchedule = async (user_Id: string) => {
 };
 const unfollowAUser = async (follower_id: string, user_id: string) => {
   try {
-    const followeeId = new toId(follower_id);
-    const userId = new toId(user_id);
+    const followeeId = follower_id as string;
+    const userId = user_id as string;
 
     const foundUser = await User.findUserById(user_id);
     if (!foundUser) throw new Error("User is not found");
@@ -441,7 +442,7 @@ const findFollowing = async (user_id: string) => {
 };
 export const clearRefreshToken = async (userId: string) => {
   try {
-    const user_Id = new toId(userId);
+    const user_Id = userId as string;
     const foundUser = await User.findByIdAndUpdate(
       { _id: user_Id },
       {
@@ -467,7 +468,7 @@ export const clearRefreshToken = async (userId: string) => {
 };
 export const addAviIMG = async (user_Id: string, fileName: string) => {
   try {
-    const userId = new toId(user_Id);
+    const userId = user_Id as string;
     const updatedUser = await User.findByIdAndUpdate(
       { _id: userId },
       {
@@ -487,8 +488,8 @@ export const addAviIMG = async (user_Id: string, fileName: string) => {
 };
 export const getIMG = async (id: string) => {
   try {
-    const _id = new toId(id);
-    const foundUser = await User.findOne(_id)
+    const _id = id as string;
+    const foundUser = await User.findOne({ _id: _id })
       .clone()
       .catch((err) => {
         throw err;
@@ -496,7 +497,10 @@ export const getIMG = async (id: string) => {
 
     if (!foundUser) throw new Error("user not found");
 
-    if (foundUser.profile.avi.aviUrl) return foundUser.profile.avi.aviUrl;
+    if (foundUser.profile.avi?.aviUrl) return foundUser.profile.avi.aviUrl;
+    if (!foundUser.profile.avi?.aviName) {
+      throw new Error("User has no avatar set");
+    }
 
     const imgUrl = await retrieveIMG(foundUser.profile.avi.aviName).catch(
       (err) => {
@@ -520,14 +524,14 @@ export const getIMG = async (id: string) => {
 };
 export const deleteIMG = async (id: string) => {
   try {
-    const _id = new toId(id);
-    const foundUser = await User.findOne(_id).clone();
+    const _id = id as string;
+    const foundUser = await User.findOne({ _id: _id }).clone();
 
     if (!foundUser) throw new Error("user not found");
 
     await deleteAviIMG(foundUser.profile.avi.aviName);
 
-    const updatedUser = await User.updateOne(_id, {
+    const updatedUser = await User.updateOne({ _id: _id }, {
       $pull: {
         avi: {
           aviUrl: undefined,
@@ -548,7 +552,7 @@ const getUserRecommendedRooms = async (userId: string) => {
     const recommendRooms = await User.aggregate([
       {
         $match: {
-          _id: new toId(userId),
+          _id: userId as string,
         },
       },
       {
@@ -645,7 +649,7 @@ export const getUserRecommendRooms = async (
   filterByLocation = false
 ) => {
   try {
-    const userObjectId = new toId(userId);
+    const userObjectId = userId as string;
 
     // Get user’s current location and radius (in miles)
     const user = await User.findById(userObjectId, {

@@ -9,7 +9,7 @@ import {
   Race,
   Types,
 } from "../user/user.interface";
-import bcrypt from "bcrypt";
+import bcrypt from "../../utils/bcrypt";
 import * as dotenv from "dotenv";
 dotenv.config();
 import config from "config";
@@ -230,6 +230,13 @@ const UserSchema = new Schema<IUserDocument>(
         ref: "Chats",
       },
     ],
+      phoneNumber: { type: String },
+      state: { type: String },
+      otp: { type: String },
+      otpExpiry: { type: Date },
+      isVerified: { type: Boolean, default: false },
+      appleId: { type: String },
+      googleId: { type: String },
   },
   { timestamps: true, minimize: false }
 );
@@ -244,27 +251,23 @@ UserSchema.index({ followers: 1 });
 UserSchema.index({ following: 1 });
 UserSchema.index({ created_rooms: 1 });
 
-export const UserCompare = (UserSchema.methods = {
-  async comparePass(pass: string, password: string) {
-    Logging.log(`entered ${pass}`);
-    Logging.log(`Saved password: ${password}`);
-    const comparedPass = await bcrypt.compare(pass, password);
-    Logging.log(comparedPass);
-    return comparedPass;
-  },
-});
+UserSchema.methods.comparePass = async function(pass: string, password: string) {
+  Logging.log(`entered ${pass}`);
+  Logging.log(`Saved password: ${password}`);
+  const comparedPass = await bcrypt.compare(pass, password);
+  Logging.log(comparedPass);
+  return comparedPass;
+};
 
-const SetAge = (UserSchema.methods = {
-  setAge(birthDate: Date): number {
-    var today = new Date();
-    var age = today.getFullYear() - birthDate.getFullYear();
-    var m = today.getMonth() - birthDate.getMonth();
-    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-      age--;
-    }
-    return age;
-  },
-});
+UserSchema.methods.setAge = function(birthDate: Date): number {
+  var today = new Date();
+  var age = today.getFullYear() - birthDate.getFullYear();
+  var m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
 
 UserSchema.statics.findByUsername = function (username: string) {
   return this.findOne({ "auth.username": username });
@@ -291,17 +294,15 @@ UserSchema.pre("save", async function (next) {
     return next();
   } else {
     const salt = await bcrypt.genSalt(Number(config.get("SaltRounds")));
-    const hash = await bcrypt.hash(user.auth.password, salt);
-    user.auth.password = hash;
+    const hash = await bcrypt.hash((user as any).auth.password, salt);
+    (user as any).auth.password = hash;
     next();
   }
 
   if (!user.isModified("profile.birthDate")) {
     return next();
   } else {
-    user.profile.demographic.age = SetAge.setAge(
-      user.profile.birthDate
-    ).valueOf();
+    (user as any).profile.demographic.age = (UserSchema.methods as any).setAge((user as any).profile.birthDate);
     next();
   }
 

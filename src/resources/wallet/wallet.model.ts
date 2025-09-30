@@ -78,14 +78,6 @@ const walletSchema = new Schema<IWalletModel & IWalletDocument>(
         required: true,
       },
     },
-    createdAt: {
-      type: Date,
-      required: true,
-    },
-    updatedAt: {
-      type: Date,
-      required: true,
-    },
   },
   { timestamps: true }
 );

@@ -20,10 +20,10 @@ export const RequiredAuth = (
 
   try {
     const decoded = verifyAccessToken(token) as jwt.JwtPayload;
-    req.user = { _id: decoded._id, role: decoded.role };
+    const userId = decoded?._id || decoded?.userId;
+    req.user = { _id: userId, role: decoded?.role } as any;
     next();
   } catch (error) {
-    Logging.error(error);
     return res.status(403).json({ message: "Token invalid or expired" });
   }
 };
@@ -49,7 +49,7 @@ export const RequiredPaidRoomEntry = (
   try {
     const authHeader = req.headers.authorization;
 
-    const token = authHeader && authHeader.split(" ")[2];
+    const token = authHeader && authHeader.split(" ")[1];
 
     const user = req.user;
 
@@ -57,19 +57,19 @@ export const RequiredPaidRoomEntry = (
       return res.status(401).json({ message: "Token missing or invalid" });
     }
 
-    const decoded = verifyAccessToken(token) as jwt.JwtPayload;
+    const raw = verifyAccessToken(token) as unknown;
+    const decoded: any = typeof raw === "string" ? JSON.parse(raw) : (raw as jwt.JwtPayload);
     req.paidRoom = {
-      roomId: decoded.roomId,
-      userId: decoded.userId,
-      role: decoded.role,
-    };
+      roomId: decoded?.roomId,
+      userId: decoded?.userId || decoded?._id,
+      role: decoded?.role,
+    } as any;
 
-    if (!user?._id.equals(decoded.userId) || !decoded)
+    if (!decoded || String(user?._id) !== String(decoded?.userId || decoded?._id))
       return res.status(403).json({ message: "Token invalid or expired" });
 
     next();
   } catch (error: any) {
-    Logging.error(error.message);
     throw error.message;
   }
 };
@@ -83,26 +83,26 @@ export const RequiredWalletAuth = (
   try {
     const authHeader = req.headers.authorization;
 
-    const token = authHeader && authHeader.split(" ")[2]; // Bearer <token>
+    const token = authHeader && authHeader.split(" ")[1]; // Bearer <token>
 
     if (!token) {
       return res.status(401).json({ message: "Token missing or invalid" });
     }
 
-    const decoded = verifyAccessToken(token) as jwt.JwtPayload;
+    const raw = verifyAccessToken(token) as unknown;
+    const decoded: any = typeof raw === "string" ? JSON.parse(raw) : (raw as jwt.JwtPayload);
     req.wallet = {
-      userId: decoded.userId,
-      walletId: decoded._id,
-      name: decoded.name,
-      email: decoded.email,
-    };
+      userId: decoded?.userId || decoded?._id,
+      walletId: decoded?._id,
+      name: decoded?.name,
+      email: decoded?.email,
+    } as any;
 
     if (!decoded)
       return res.status(403).json({ message: "Token invalid or expired" });
 
     next();
   } catch (error: any) {
-    Logging.error(error.message);
     throw error.message;
   }
 };

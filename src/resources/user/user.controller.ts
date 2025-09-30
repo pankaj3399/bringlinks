@@ -73,7 +73,7 @@ class UserController implements Controller {
       RequiredAuth,
       this.updateUserPreferences
     );
-    this.router.get(
+    this.router.post(
       `${this.path}/refreshToken/:userId`,
       RequiredAuth,
       this.refreshToken
@@ -112,7 +112,6 @@ class UserController implements Controller {
     );
     this.router.put(
       `${this.path}/image/:userId`,
-      //fileUpload(),
       RequiredAuth,
       isUserAccount,
       this.uploadIMG
@@ -142,13 +141,7 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      Logging.log(JSON.stringify(req.body));
-
-      // Logging.log(`file: ${req.file}`)
       const [createdUser, token, refreshToken] = await registerUser(req.body);
-
-      Logging.info(`saved user on Database: ${createdUser} \n 
-            Saved Token in cookies ${token}`);
 
       res.cookie(validateEnv.COOKIE, token);
       res.status(201).send({ createdUser, token, refreshToken });
@@ -163,20 +156,13 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      Logging.info(req.body);
-      const [foundUser, token] = await loginUser(req.body);
+      const [foundUser, token, refreshToken] = await loginUser(req.body);
 
       if (!foundUser || !token)
         return res.status(400).json({ message: "User not found" });
 
-      Logging.info(
-        `SUCCESSFUL LOG IN \n HERE IS THE REQUEST: ${JSON.stringify(req.body)}`
-      );
-      Logging.info(`Saved Token in cookies ${token}`);
-      Logging.log(`Returned User: ${JSON.stringify(foundUser)}`);
-
       res.cookie(validateEnv.COOKIE, token);
-      res.status(200).json({ foundUser, token });
+      res.status(200).json({ foundUser, token, refreshToken });
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }
@@ -187,16 +173,14 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      Logging.log(`from controller: ${JSON.stringify(req.body)}`);
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const updatedUser = await updateUser(req.body, userId);
 
       if (!updatedUser)
         return res.status(400).json({ message: "User not updated" });
 
-      Logging.info(updatedUser);
       res.status(201).json(updatedUser);
     } catch (err: any) {
       next(new HttpException(400, err.message));
@@ -208,9 +192,8 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      Logging.log(`from controller: ${JSON.stringify(req.body)}`);
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const foundUser = await getUserById(userId);
       if (!foundUser)
@@ -221,7 +204,6 @@ class UserController implements Controller {
       if (!updatedUser)
         return res.status(400).json({ message: "User not updated" });
 
-      Logging.log(`RESPONSE: \n ${JSON.stringify(updatedUser)}`);
       res.status(200).json(updatedUser);
     } catch (err: any) {
       next(new HttpException(400, err.message));
@@ -234,13 +216,12 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const foundUser = await getUserById(userId);
       if (!foundUser)
         return res.status(400).json({ message: "User not found" });
 
-      Logging.info(foundUser);
       res.status(200).json(foundUser);
     } catch (err: any) {
       Logging.error(err);
@@ -254,13 +235,12 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { username } = req.params;
-      if (!username) res.status(400).send("Username is required");
+      if (!username) return res.status(400).send("Username is required");
 
       const foundUser = await getUserUsername(username);
       if (!foundUser)
         return res.status(400).json({ message: "User not found" });
 
-      Logging.info(foundUser);
       res.status(200).json(foundUser);
     } catch (err: any) {
       Logging.error(err);
@@ -275,7 +255,7 @@ class UserController implements Controller {
     try {
       const { refreshToken } = req.body.token;
       const { userId } = req.params;
-      if (!refreshToken) res.status(400).send("Refresh token is required");
+      if (!refreshToken) return res.status(400).send("Refresh token is required");
 
       const { newToken, freshToken }: Secret[] | any = await refreshTokenUser(
         refreshToken,
@@ -298,7 +278,8 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const user = await clearRefreshToken(req.user?._id);
+      if (!req.user?._id) return res.status(401).json({ message: "Unauthorized" });
+      const user = await clearRefreshToken(req.user._id as string);
 
       if (!user)
         return res.status(400).json({ message: "User not logged out" });
@@ -316,7 +297,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
       const foundSchedule = await getSchedule(userId);
       if (!foundSchedule)
         return res.status(400).json({ message: "Schedule not found" });
@@ -334,7 +315,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const deletedUser = await deleteUser(userId);
       if (!deletedUser)
@@ -354,13 +335,12 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      Logging.log(`Body: ${JSON.stringify(req.body)} ${req.user?._id}`);
-      const user = await updatePassword(req.body, req.user?._id);
+      if (!req.user?._id) return res.status(401).json({ message: "Unauthorized" });
+      const user = await updatePassword(req.body, req.user._id as string);
 
       if (!user)
         return res.status(400).json({ message: "Error updating password" });
 
-      Logging.info(req.body);
       res.status(200).send(req.body);
     } catch (err: any) {
       next(new HttpException(400, err.message));
@@ -373,14 +353,13 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { followerId, userId } = req.params;
-      if (!followerId || !userId) res.status(400).send("Id is required");
+      if (!followerId || !userId) return res.status(400).send("Id is required");
       const followed = await followerAUser(userId, followerId);
 
       if (!followed)
         return res
           .status(400)
           .json({ message: "User not able to be followed, try again" });
-      Logging.info(followed);
       res.status(200).json(followed);
     } catch (err: any) {
       next(new HttpException(400, err.message));
@@ -393,7 +372,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { followerId, userId } = req.params;
-      if (!followerId || !userId) res.status(400).send("Id is required");
+      if (!followerId || !userId) return res.status(400).send("Id is required");
 
       const followed = await unfollowAUser(userId, followerId);
 
@@ -401,7 +380,6 @@ class UserController implements Controller {
         return res
           .status(400)
           .json({ message: "User not able to be unfollowed, try again" });
-      Logging.info(followed);
       res.status(200).json(followed);
     } catch (err: any) {
       next(new HttpException(400, err.message));
@@ -415,14 +393,13 @@ class UserController implements Controller {
     try {
       const { userId } = req.params;
       const { fileType } = req.query;
-      Logging.log(fileType);
-      Logging.log(req.files);
 
-      if (!userId) res.status(400).send("UserId is required");
-      if (!fileType) res.status(400).send("File type is required");
-      if (!req.files) res.status(400).send("File is required");
+      if (!userId) return res.status(400).send("UserId is required");
+      if (!fileType) return res.status(400).send("File type is required");
+      if (!req.files) return res.status(400).send("File is required");
+      if (!req.files.image) return res.status(400).send("Image file is required");
 
-      const { name, data, mimetype } = req.files?.aviPhoto as UploadedFile;
+      const { name, data, mimetype } = req.files.image as UploadedFile;
       const fileName = `${userId}/${fileType}/${imgName}-${Date.now()}${name}`;
 
       const putImage = await putS3Object(data, fileName, mimetype);
@@ -440,7 +417,8 @@ class UserController implements Controller {
 
       res.status(201).send({ signedUrl });
     } catch (err: any) {
-      next(new HttpException(400, err));
+      const msg = typeof err === "string" ? err : err?.message || "Upload failed";
+      next(new HttpException(400, msg));
     }
   };
   private retrieveImg = async (
@@ -450,7 +428,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
 
       const foundImage = await getIMG(userId);
 
@@ -462,11 +440,12 @@ class UserController implements Controller {
       if (!isValid) {
         const url = await getIMG(userId);
         if (!url) return res.status(400).json({ message: "Image not found" });
-        res.status(200).send({ newUrl: url });
+        return res.status(200).send({ newUrl: url });
       }
-      res.status(200).send({ foundUrl: foundImage });
+      return res.status(200).send({ foundUrl: foundImage });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      const msg = typeof err === "string" ? err : err?.message;
+      next(new HttpException(400, msg));
     }
   };
   private deleteAviPhoto = async (
@@ -476,7 +455,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
       const foundImage = await deleteIMG(userId);
 
       if (!foundImage)
@@ -494,7 +473,7 @@ class UserController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      if (!userId) return res.status(400).send("Id is required");
       //Redis Layer
 
       const recommendedRooms = await getUserRecommendRooms(userId);
@@ -502,7 +481,6 @@ class UserController implements Controller {
       if (!recommendedRooms)
         return res.status(400).json({ message: "No recommend rooms found" });
 
-      Logging.info(recommendedRooms);
 
       res.status(200).json(recommendedRooms);
     } catch (err: any) {

@@ -25,7 +25,6 @@ import {
   postPermissions,
 } from "../../middleware/authorization.middleware";
 import { getUserById } from "resources/user/user.service";
-var toId = mongoose.Types.ObjectId;
 
 class PostController implements Controller {
   public path = "/posts";
@@ -68,11 +67,6 @@ class PostController implements Controller {
       likePermissions,
       this.unLikeAPost
     );
-    this.router.get(
-      `${this.path}/nearpost/:userId`,
-      RequiredAuth,
-      this.getNearPost
-    );
     this.router.post(
       `${this.path}/comment/:userid/:postid`,
       //RequiredAuth,
@@ -106,7 +100,6 @@ class PostController implements Controller {
       if (!foundPost)
         return res.status(400).json({ message: "Post not found" });
 
-      Logging.info(foundPost);
       res.status(200).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
@@ -126,7 +119,6 @@ class PostController implements Controller {
       if (!foundPost)
         return res.status(400).json({ message: "Post not found" });
 
-      Logging.info(foundPost);
       res.status(200).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
@@ -141,6 +133,8 @@ class PostController implements Controller {
     try {
       const { userid } = req.params;
       if (!userid) return res.status(400).json({ message: "Id is required" });
+      // ensure user_Id is set on body for schema validation
+      (req.body as any).user_Id = userid;
       const foundPost = await createAPost(req.body, userid);
 
       if (!foundPost)
@@ -163,7 +157,7 @@ class PostController implements Controller {
 
       const updatedPost = await updatePost({
         content: req.body.content,
-        user_Id: new toId(userid),
+        user_Id: new mongoose.Types.ObjectId(userid),
         _id: postid,
       });
 
@@ -190,7 +184,6 @@ class PostController implements Controller {
 
       if (!deletedPost)
         return res.status(400).json({ message: "Post not deleted" });
-      Logging.log(deletedPost);
       res.status(200).json(req.body);
     } catch (err: any) {
       Logging.error(err);
@@ -210,7 +203,6 @@ class PostController implements Controller {
       if (!likedPost)
         return res.status(400).json({ message: "Post not liked" });
 
-      Logging.info(likedPost);
       res.status(200).json(likedPost);
     } catch (err: any) {
       Logging.error(err);
@@ -230,7 +222,6 @@ class PostController implements Controller {
 
       if (!unlikedUser)
         return res.status(400).json({ message: "Post not unliked" });
-      Logging.log(unlikedUser);
       res.status(200).json(unlikedUser);
     } catch (err: any) {
       Logging.error(err);
@@ -251,7 +242,6 @@ class PostController implements Controller {
       if (!comments)
         return res.status(400).json({ message: "Comment not created" });
 
-      Logging.log(comments);
       res.status(200).json(comments);
     } catch (err: any) {
       Logging.error(err);
@@ -273,7 +263,6 @@ class PostController implements Controller {
       if (deletedComment?.modifiedCount === 0)
         return res.status(400).json({ message: "Comment not deleted" });
 
-      Logging.info(deletedComment);
       res.status(200).send({ message: "Comment deleted" });
     } catch (err: any) {
       Logging.error(err);
@@ -295,7 +284,6 @@ class PostController implements Controller {
       if (!editedComment)
         return res.status(400).json({ message: "Comment not edited" });
 
-      Logging.info(editedComment);
       res.status(200).json(req.body);
     } catch (err: any) {
       Logging.error(err);

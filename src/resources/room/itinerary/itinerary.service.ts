@@ -5,7 +5,6 @@ import Rooms from "../room.model";
 import mongoose from "mongoose";
 import { IRoomsDocument } from "../room.interface";
 import Logging from "../../../library/logging";
-var toId = mongoose.Types.ObjectId;
 
 export const getItineraryById = async (_id: string) => {
   try {
@@ -71,8 +70,8 @@ export const updateItinerary = async (
 
 export const deleteItinerary = async (_id: string, room_Id: string) => {
   try {
-    const itineraryId = new toId(_id);
-    const roomId = new toId(room_Id);
+    const itineraryId = _id as string;
+    const roomId = room_Id as string;
 
     const foundRoomInItinerary = await Rooms.findByIdAndUpdate(
       { _id: roomId },
@@ -83,7 +82,7 @@ export const deleteItinerary = async (_id: string, room_Id: string) => {
 
     if (!foundRoomInItinerary) throw new Error("Itinerary not found");
 
-    const deletedItinerary = await Itinerary.deleteOne({ _id: new toId(_id) });
+    const deletedItinerary = await Itinerary.deleteOne({ _id: _id });
 
     if (!deletedItinerary) throw new Error("Itinerary not deleted");
 

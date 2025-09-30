@@ -38,7 +38,7 @@ const PostSchema = new Schema<IPostDocument>(
         type: [Number],
         required: true,
       },
-    },
+    } as any,
     // likes of post
     likes: [
       {

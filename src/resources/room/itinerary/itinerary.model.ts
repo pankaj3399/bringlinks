@@ -1,6 +1,5 @@
 import mongoose, { model, Schema } from "mongoose";
 import { ItineraryDocument, ItineraryModel } from "./itinerary.interface";
-var toId = mongoose.Types.ObjectId;
 
 const ItinerarySchema = new Schema<ItineraryDocument>({
   name: {
@@ -91,7 +90,7 @@ const ItinerarySchema = new Schema<ItineraryDocument>({
 });
 
 ItinerarySchema.statics.findItineraryById = function (_id: string) {
-  const itineraryId = new toId(_id);
+  const itineraryId = _id as string;
   return this.findOne({ _id: itineraryId });
 };
 

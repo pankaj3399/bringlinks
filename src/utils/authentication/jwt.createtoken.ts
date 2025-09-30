@@ -16,7 +16,7 @@ const CreateToken = (payload: JwtPayload) => {
     throw Error("no refresh secret key found");
   }
 
-  const token = jwt.sign(JSON.stringify(payload), secretKey);
+  const token = jwt.sign(payload, secretKey);
 
   const refreshToken = jwt.sign({ payload }, refreshSecretKey);
 

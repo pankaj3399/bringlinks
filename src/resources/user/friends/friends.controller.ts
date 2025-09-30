@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Controller from "../../../utils/interfaces/controller.interface";
 import HttpException from "../../../middleware/exceptions/http.exception";
-import { addFriend, getFriends, unFriend } from "./friends.service";
+import { addFriend, findFriend as getFriends, removeFriend as unFriend } from "./friends.service";
 import ValidationMiddleware from "middleware/val.middleware";
 import { createFriend } from "./friends.validation";
 

@@ -13,11 +13,11 @@ import {
   updateItinerary,
 } from "./itinerary.service";
 import mongoose from "mongoose";
+import { IRoomsDocument } from "../room.interface";
 import { roomAdminPermissions } from "../../../middleware/authorization.middleware";
 import validate from "./itinerary.validation";
 import validationMiddleware from "../../../middleware/val.middleware";
 
-var toId = mongoose.Types.ObjectId;
 
 class ItineraryController implements Controller {
   public path = "/itinerary";
@@ -63,9 +63,10 @@ class ItineraryController implements Controller {
       const { userId, roomId } = req.params;
       if (!userId || !roomId) throw new Error("Id is required");
 
-      const _id = new toId(roomId);
+      const _id = roomId as string;
+      const roomRef = { _id } as Pick<IRoomsDocument, "_id">;
 
-      const createdItinerary = await createItinerary(req.body, _id);
+      const createdItinerary = await createItinerary(req.body, roomRef);
       if (!createdItinerary) throw new Error("Itinerary not created");
 
       Logging.info(createdItinerary);

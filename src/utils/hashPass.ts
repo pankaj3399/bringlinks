@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import bcrypt from "./bcrypt";
 import config from "config";
 import Logging from "../library/logging";
 import User from "../resources/user/user.model";
@@ -7,8 +7,8 @@ import { validateEnv } from "../../config/validateEnv";
 
 const hashPass = (user: IUserDocument, password: string) => {
   try {
-    bcrypt.genSalt(config.get<number>("SaltRounds"), function (err, salt) {
-      bcrypt.hash(password, validateEnv.Saltrounds, async function (err, hash) {
+    bcrypt.genSalt(config.get<number>("SaltRounds"), function (err: any, salt: string) {
+      bcrypt.hash(password, validateEnv.Saltrounds, async function (err: any, hash: string) {
         if (err) throw new Error("hash not created");
         await User.findByIdAndUpdate(user._id, {
           auth: { ...user.auth, password: hash },

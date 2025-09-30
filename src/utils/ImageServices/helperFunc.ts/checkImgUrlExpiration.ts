@@ -8,7 +8,6 @@ export const checkImageUrl = (signedUrl: string) => {
     const amzExpires = url.searchParams.get("X-Amz-Expires");
 
     if (!amzDate || !amzExpires) {
-      console.error("Invalid signed URL: Missing expiration details.");
       return false;
     }
 
@@ -36,7 +35,6 @@ export const checkImageUrl = (signedUrl: string) => {
     const isValid = Date.now() < expirationDate.getTime();
     return isValid;
   } catch (error) {
-    console.error("Error validating signed URL:", error);
     return false; // Assume invalid if any error occurs
   }
 };

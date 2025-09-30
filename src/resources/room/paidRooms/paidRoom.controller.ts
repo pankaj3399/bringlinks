@@ -92,8 +92,8 @@ class PaidRoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { roomId } = req.params;
-      if (!roomId) res.status(400).send("User Id is required");
+      const { roomId } = req.body;
+      if (!roomId) res.status(400).send("roomId is required in body");
 
       const createdPaidRoom = await createPaidRoom(roomId, req.body);
       if (!createdPaidRoom) res.status(400).send("Paid room not created");
@@ -128,7 +128,7 @@ class PaidRoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { roomId, userId } = req.params;
-      if (!roomId || userId) res.status(400).send("User Id is required");
+      if (!roomId || !userId) res.status(400).send("Id is required");
       const { cardInfo } = req.body;
       if (!cardInfo) res.status(400).send("Card info is required");
 

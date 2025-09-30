@@ -1,12 +1,21 @@
 import { cleanEnv, str, port, num } from "envalid";
 import * as dotenv from "dotenv";
 
-// Load environment variables from the specified .env file
-const envFile = `.env.${process.env.NODE_ENV}`;
-dotenv.config({ path: envFile });
+// Load environment variables from the appropriate .env file
+// Priority: explicit NODE_ENV file -> .env.development (if dev) -> .env
+const nodeEnv = process.env.NODE_ENV;
+let loadedPath = "";
+if (nodeEnv) {
+  const envFile = `.env.${nodeEnv}`;
+  const result = dotenv.config({ path: envFile });
+  if (!result.error) loadedPath = envFile;
+}
+if (!loadedPath) {
+  // Fallback to .env if NODE_ENV not set or specific file missing
+  const result = dotenv.config({ path: ".env" });
+  if (!result.error) loadedPath = ".env";
+}
 
-// Debug: Log loaded environment variables to ensure they are loaded correctly
-console.log("Loaded variables:", process.env.NODE_ENV);
 
 // Validate environment variables
 export const validateEnv = cleanEnv(process.env, {
@@ -43,4 +52,20 @@ export const validateEnv = cleanEnv(process.env, {
   FRONTEND_URL: str(),
   HELCIM_BASE_URL: str(),
   HELCIM_API_KEY: str(),
+  // New auth/env vars
+  ALLOWED_STATES: str({ default: "" }),
+  TWILIO_ACCOUNT_SID: str({ default: "" }),
+  TWILIO_AUTH_TOKEN: str({ default: "" }),
+  TWILIO_PHONE_NUMBER: str({ default: "" }),
+  // APPLE_CLIENT_ID: str({ default: "" }),
+  // APPLE_TEAM_ID: str({ default: "" }),
+  // APPLE_KEY_ID: str({ default: "" }),
+  // APPLE_PRIVATE_KEY: str({ default: "" }),
+  // Dev-only toggles
+  // ALLOW_FAKE_APPLE_TOKEN: str({ default: "false" }),
+  // APPLE_FAKE_JWT_SECRET: str({ default: "" }),
+  // Google OAuth
+  GOOGLE_CLIENT_ID: str({ default: "" }),
+  GOOGLE_CLIENT_SECRET: str({ default: "" }),
+  GOOGLE_CALLBACK_URL: str({ default: "" }),
 });

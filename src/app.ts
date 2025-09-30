@@ -11,9 +11,15 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import Controller from "./utils/interfaces/controller.interface";
 import { validateEnv } from "../config/validateEnv";
-import { createMessage } from "./resources/chats/chats.service";
+import { createMessage, createMessageWithMedia, editMessage, deleteMessage } from "./resources/chats/chats.service";
 import { ChatTypes, IChatsDocument } from "./resources/chats/chats.interface";
+import Chats from "./resources/chats/chats.model";
 import fileUpload from "express-fileupload";
+import session from "express-session";
+import passport from "passport";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import User from "./resources/user/user.model";
+import { validateEnv as env } from "../config/validateEnv";
 
 class App {
   public express: Application;
@@ -34,6 +40,7 @@ class App {
     });
     this.port = port;
     this.initializeMiddleware();
+    this.initializePassport();
     this.initializeDatabaseConnection();
     this.initializeSocket(this.io);
     this.initializeControllers(controllers);
@@ -47,7 +54,19 @@ class App {
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
     this.express.use(compression());
-    this.express.use(fileUpload());
+    this.express.use(fileUpload({
+      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+      useTempFiles: true,
+      tempFileDir: '/tmp/'
+    }));
+    this.express.use(session({
+      secret: env.COOKIE,
+      resave: false,
+      saveUninitialized: false,
+    }));
+    this.express.use(passport.initialize());
+    this.express.use(passport.session());
+    this.express.set('passport', passport);
     this.express.set("io", this.io);
     this.express.use((req, res, next) => {
       /* Log the req */
@@ -64,13 +83,71 @@ class App {
       next();
     });
   }
-  private initializeSocket(io: Server): void {
-    io.on("connection", (socket: Socket) => {
-      Logging.log("User connected");
-      // When a user connects, log them in
-      Logging.log(`A user connected: ${socket.id}`);
+  private initializePassport(): void{
+    passport.serializeUser((user: any, done: (err: any, id?: any) => void) =>{
+      done(null, user._id?.toString?.() || user.id);
+    });
+    passport.deserializeUser(async (id: string, done: (err: any, user?: any | false | null) => void) => {
+      try {
+        const user = await User.findById(id).select("-auth.password -refreshToken");
+        done(null, user);
+      } catch (e) {
+        done(e as any, null);
+      }
+    });
 
-      socket.on("error", (error) => {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: env.GOOGLE_CLIENT_ID,
+          clientSecret: env.GOOGLE_CLIENT_SECRET,
+          callbackURL: env.GOOGLE_CALLBACK_URL,
+        },
+        async (_accessToken: string, _refreshToken: string, profile: any, done: (err: any, user?: any, info?: any) => void) => {
+          try {
+            const googleId = profile.id;
+            const email = profile.emails?.[0]?.value?.toLowerCase();
+            const firstName = profile.name?.givenName || "";
+            const lastName = profile.name?.familyName || "";
+
+            let user = await User.findOne({ $or: [ { googleId }, { "auth.email": email } ] }).exec();
+            if (!user) {
+              const safeUsername = `google_${String(googleId || "user").slice(0, 24)}`; 
+              user = await User.create({
+                auth: {
+                  username: safeUsername,
+                  password: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
+                  email,
+                },
+                profile: {
+                  firstName: firstName || "Google",
+                  lastName: lastName || "User",
+                  birthDate: new Date('2000-01-01T00:00:00Z'),
+                },
+                isVerified: true,
+                googleId,
+              } as any);
+            } else if (!(user as any).googleId){
+              (user as any).googleId = googleId;
+              await user.save();
+            }
+            return done(null, user);
+          } catch (err) {
+            return done(err as any, undefined);
+          }
+        }
+      )
+    );
+  }
+  private initializeSocket(io: Server): void {
+    let connectionCount = 0;
+    
+    (io as any).on("connection", (socket: Socket) => {
+      connectionCount++;
+      
+      Logging.log(`A user connected: ${socket.id} (Total connections: ${connectionCount})`);
+
+      socket.on("error", (error: unknown) => {
         Logging.error(`Socket error: ${error}`);
       });
 
@@ -87,49 +164,100 @@ class App {
           sender,
           receiver,
           room_Id,
+          groupId,
           message,
           chatType,
-        }: IChatsDocument) => {
+          media,
+          replyTo,
+        }: any) => {
           try {
-            const newMessage = await createMessage({
+            const messageData ={
               sender,
               receiver,
-              room_Id,
+              roomId: room_Id,
+              groupId,
               message,
               chatType,
-            } as IChatsDocument);
+              media,
+              replyTo
+            };
 
-            const groupId = newMessage?.group;
+            const newMessage = await createMessageWithMedia(messageData);
 
             if (newMessage) {
               if (chatType === ChatTypes.user && receiver) {
-                // Emit the message to the user in a user-to-user chat
                 io.to(receiver as unknown as string).emit(
                   "receiveMessage",
                   newMessage
                 );
+                io.to(sender as unknown as string).emit(
+                  "receiveMessage",
+                  newMessage
+                );
               } else if (chatType === ChatTypes.group && groupId) {
-                // Emit the message to all group members
                 io.to(groupId as unknown as string).emit(
                   "receiveMessage",
                   newMessage
                 );
               } else if (chatType === ChatTypes.room && room_Id) {
-                // Emit the message to all room participants
                 io.to(room_Id as unknown as string).emit(
                   "receiveMessage",
                   newMessage
                 );
               }
+              
+              socket.emit("receiveMessage", newMessage);
             }
           } catch (error) {
-            Logging.error(`Error sending message: ${error}`);
+            socket.emit("messageError", { error: "Failed to send message" });
           }
         }
       );
 
+      socket.on("editMessage", async ({ messageId, newMessage, userId }) =>{
+        try {
+          const updatedMessage = await editMessage(messageId, newMessage, userId);
+          
+          if (updatedMessage) {
+            if (updatedMessage.chatType === ChatTypes.user && updatedMessage.receiver) {
+              io.to(updatedMessage.receiver as unknown as string).emit("messageEdited", updatedMessage);
+              io.to(updatedMessage.sender as unknown as string).emit("messageEdited", updatedMessage);
+            } else if (updatedMessage.chatType === ChatTypes.group && updatedMessage.group) {
+              io.to(updatedMessage.group as unknown as string).emit("messageEdited", updatedMessage);
+            } else if (updatedMessage.chatType === ChatTypes.room && updatedMessage.room_Id) {
+              io.to(updatedMessage.room_Id as unknown as string).emit("messageEdited", updatedMessage);
+            }
+          }
+        } catch (error) {
+          socket.emit("messageError", { error: "Failed to edit message" });
+        }
+      });
+
+      socket.on("deleteMessage", async ({ messageId, userId }) => {
+        try {
+          const success = await deleteMessage(messageId, userId);
+          
+          if (success) {
+            const message = await Chats.findById(messageId);
+            if (message) {
+              if (message.chatType === ChatTypes.user && message.receiver) {
+                io.to(message.receiver as unknown as string).emit("messageDeleted", { messageId });
+                io.to(message.sender as unknown as string).emit("messageDeleted", { messageId });
+              } else if (message.chatType === ChatTypes.group && message.group) {
+                io.to(message.group as unknown as string).emit("messageDeleted", { messageId });
+              } else if (message.chatType === ChatTypes.room && message.room_Id) {
+                io.to(message.room_Id as unknown as string).emit("messageDeleted", { messageId });
+              }
+            }
+          }
+        } catch (error){
+          socket.emit("messageError", { error: "Failed to delete message" });
+        }
+      });
+
       socket.on("disconnect", () => {
-        Logging.log(`A user disconnected: ${socket.id}`);
+        connectionCount--;
+        Logging.log(`A user disconnected: ${socket.id} (Total connections: ${connectionCount})`);
       });
     });
     Logging.log(`Socket is ready`);

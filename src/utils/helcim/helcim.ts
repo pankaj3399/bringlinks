@@ -69,7 +69,6 @@ class HelcimService {
 
       return { success: true };
     } catch (err) {
-      console.error("Lambda call failed:", err);
       throw err;
     }
   };

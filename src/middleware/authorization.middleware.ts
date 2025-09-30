@@ -7,7 +7,6 @@ import Rooms from "../resources/room/room.model";
 import Likes from "../resources/likes/likes.model";
 import Logging from "../library/logging";
 import { RoomPrivacy } from "../resources/room/room.interface";
-var toId = mongoose.Types.ObjectId;
 
 //takes the id of the user making the request
 // checks if that is the user making request account
@@ -17,11 +16,13 @@ export const isUserAccount = async (
   next: NextFunction
 ) => {
   try {
-    if (req.params.userId !== req.user?._id)
+    const paramUserId = String(req.params.userId);
+    const authUserId = String(req.user?._id);
+    if (paramUserId !== authUserId)
       return res.status(403).send({ message: "Must have valid user id" });
-    const user_Id = new toId(req.user?._id);
+    const user_Id = authUserId as string;
 
-    const foundUser = await User.find({ _id: { $eq: user_Id } })
+    const foundUser = await User.find({ _id: user_Id })
       .clone()
       .exec();
 
@@ -41,9 +42,9 @@ export const postPermissions = async (
 ) => {
   try {
     const { userid, postid } = req.params;
-    if (!userid || postid) res.status(400).send("Id is required");
-    const user_Id = new toId(userid);
-    const post_Id = new toId(postid);
+    if (!userid || !postid) res.status(400).send("Id is required");
+    const user_Id = userid as string;
+    const post_Id = postid as string;
     const foundUserPost = await Posts.findOne({
       _id: post_Id,
       user_Id,
@@ -67,9 +68,9 @@ export const commentPermissions = async (
     const { userid, postid, commentid } = req.params;
     if (!userid || !postid || !commentid)
       res.status(400).send("Id is required");
-    const user_Id = new toId(userid);
-    const post_Id = new toId(postid);
-    const comment_Id = new toId(commentid);
+    const user_Id = userid as string;
+    const post_Id = postid as string;
+    const comment_Id = commentid as string;
 
     // find the post Comment
     const foundPostComment = await Comments.findOne({
@@ -95,15 +96,15 @@ export const likePermissions = async (
 ) => {
   try {
     const { userid, postid, likeid } = req.params;
-    if (!userid || postid || likeid) res.status(400).send("Id is required");
+    if (!userid || !postid || !likeid) res.status(400).send("Id is required");
 
-    const user_Id = new toId(userid);
-    const post_Id = new toId(postid);
-    const like_Id = new toId(likeid);
+    const user_Id = userid as string;
+    const post_Id = postid as string;
+    const like_Id = likeid as string;
 
     const foundUserPost = await Likes.findOne({
       _id: like_Id,
-      likedUser_Id: user_Id,
+      user_Id: user_Id,
       posts: post_Id,
     });
     if (!foundUserPost)
@@ -125,14 +126,16 @@ export const isRoomPrivate = async (
   try {
     const { roomId } = req.params;
     if (!roomId) res.status(400).send("Id is required");
-    const room_Id = new toId(roomId);
+    const room_Id = roomId as string;
     const foundRoom = await Rooms.findOne({
       _id: room_Id,
       event_privacy: RoomPrivacy.private,
     }).clone();
-    if (!foundRoom)
+    // If the room IS private, block access
+    if (foundRoom)
       return res.status(401).json({ error: "This room is private" });
 
+    // Not private → continue
     next();
   } catch (error: any) {
     Logging.error(error);
@@ -151,15 +154,15 @@ export const enteredRoomPermissions = async (
     const { userId, roomId } = req.params;
     if (!userId || !roomId) res.status(400).send("Id is required");
 
-    const user_Id = new toId(userId);
-    const room_Id = new toId(roomId);
+    const user_Id = userId as string;
+    const room_Id = roomId as string;
 
     const foundUserRoom = await Rooms.findOne({
       _id: room_Id,
       entered_id: user_Id,
     }).clone();
 
-    if (!foundUserRoom?.entered_id.includes(user_Id))
+    if (!foundUserRoom?.entered_id?.some((id: any) => id?.toString() === user_Id))
       return res
         .status(401)
         .json({ error: "Must be in the room to perform this action" });
@@ -179,8 +182,8 @@ export const friendshipPermissions = async (
   try {
     const { userId, friendId } = req.params;
     if (!userId || !friendId) res.status(400).send("Id is required");
-    const user_Id = new toId(userId);
-    const friend_Id = new toId(friendId);
+    const user_Id = userId as string;
+    const friend_Id = friendId as string;
 
     const foundUser = await User.findOne({
       _id: user_Id,
@@ -213,8 +216,8 @@ export const roomAdminPermissions = async (
   try {
     const { userId, roomId } = req.params;
     if (!userId || !roomId) res.status(400).send("Id is required");
-    const user_Id = new toId(userId);
-    const room_Id = new toId(roomId);
+    const user_Id = userId as string;
+    const room_Id = roomId as string;
 
     const foundRoom = await Rooms.findOne({
       _id: room_Id,
@@ -241,8 +244,8 @@ export const isInvitedPermissions = async (
   try {
     const { userId, roomId } = req.params;
     if (!userId || !roomId) res.status(400).send("Id is required");
-    const user_Id = new toId(userId);
-    const room_Id = new toId(roomId);
+    const user_Id = userId as string;
+    const room_Id = roomId as string;
 
     //check if rooms have user in invitees if room is private
     const foundRoom = await Rooms.findOne(
@@ -269,8 +272,8 @@ export const walletPermissions = async (
     const { userId, walletId } = req.params;
     if (!userId || !walletId) res.status(400).send("Id is required");
 
-    const user_Id = new toId(userId);
-    const wallet_Id = new toId(walletId);
+    const user_Id = userId as string;
+    const wallet_Id = walletId as string;
 
     const foundUser = await User.findOne({
       _id: user_Id,
