@@ -16,7 +16,6 @@ if (!loadedPath) {
   if (!result.error) loadedPath = ".env";
 }
 
-
 // Validate environment variables
 export const validateEnv = cleanEnv(process.env, {
   NODE_ENV: str({
@@ -57,13 +56,13 @@ export const validateEnv = cleanEnv(process.env, {
   TWILIO_ACCOUNT_SID: str({ default: "" }),
   TWILIO_AUTH_TOKEN: str({ default: "" }),
   TWILIO_PHONE_NUMBER: str({ default: "" }),
-  APPLE_CLIENT_ID: str({ default: "" }),
-  APPLE_TEAM_ID: str({ default: "" }),
-  APPLE_KEY_ID: str({ default: "" }),
-  APPLE_PRIVATE_KEY: str({ default: "" }),
+  // APPLE_CLIENT_ID: str({ default: "" }),
+  // APPLE_TEAM_ID: str({ default: "" }),
+  // APPLE_KEY_ID: str({ default: "" }),
+  // APPLE_PRIVATE_KEY: str({ default: "" }),
   // Dev-only toggles
-  ALLOW_FAKE_APPLE_TOKEN: str({ default: "false" }),
-  APPLE_FAKE_JWT_SECRET: str({ default: "" }),
+  // ALLOW_FAKE_APPLE_TOKEN: str({ default: "false" }),
+  // APPLE_FAKE_JWT_SECRET: str({ default: "" }),
   // Google OAuth
   GOOGLE_CLIENT_ID: str({ default: "" }),
   GOOGLE_CLIENT_SECRET: str({ default: "" }),
