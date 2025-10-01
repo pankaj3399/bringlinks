@@ -10,6 +10,7 @@ import {
   addSpecialGuest,
   addSponsor,
   addVenueImage,
+  addVenueVerificationIMG,
   createRoomQRCode,
   createRoom,
   deleteRoom,
@@ -159,7 +160,6 @@ class RoomController implements Controller {
     );
     this.router.put(
       `${this.path}/image/:userId/:roomId`,
-      fileUpload(),
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
@@ -167,7 +167,6 @@ class RoomController implements Controller {
     );
     this.router.put(
       `${this.path}/image/media/:userId/:roomId`,
-      fileUpload(),
       RequiredAuth,
       isUserAccount,
       this.uploadMediaIMG
@@ -219,27 +218,33 @@ class RoomController implements Controller {
       if (!roomId) res.status(400).send("Id is required");
 
       const { media } = req.files as {
-        media?: UploadedFile[];
+        media?: UploadedFile | UploadedFile[];
       };
 
+      const mediaFiles: UploadedFile[] = Array.isArray(media)
+        ? media
+        : media
+        ? [media]
+        : [];
+
       await Promise.all(
-        media?.map(async (file, index) => {
-          let mediaFileName = generateFilename(
+        mediaFiles.map(async (file: UploadedFile) => {
+          const mediaFileName = generateFilename(
             fileType as FileType,
-            media[index].name as string,
+            file.name as string,
             roomId
           );
 
-          let mediaCommand = getPutObjectCommand(
+          const mediaCommand = getPutObjectCommand(
             fileType as FileType,
             mediaFileName,
-            media[index].mimetype,
-            media[index].data
+            file.mimetype,
+            file.data
           );
           Logging.warning(mediaCommand);
           await uploadRoomImage(mediaCommand as PutObjectCommand);
           await addMediaImage(roomId, mediaFileName);
-        }) || []
+        })
       ).catch((err) => {
         Logging.error(err);
       });
@@ -637,7 +642,7 @@ class RoomController implements Controller {
 
       const { flyer, venue, venueVerification } = req.files as {
         flyer?: UploadedFile;
-        venue?: UploadedFile[];
+        venue?: UploadedFile | UploadedFile[];
         venueVerification?: UploadedFile;
       };
 
@@ -659,23 +664,29 @@ class RoomController implements Controller {
           const signedUrl = await getIMG(roomId, fileType);
           res.status(201).send({ signedUrl });
           break;
-        case FileType.venue:
+        case FileType.venue: {
+          const venueFiles: UploadedFile[] = Array.isArray(venue)
+            ? venue
+            : venue
+            ? [venue]
+            : [];
+
           await Promise.all(
-            venue?.forEach(async (file: UploadedFile, index: number) => {
-              let venueFileName = generateFilename(
+            venueFiles.map(async (file: UploadedFile) => {
+              const venueFileName = generateFilename(
                 fileType,
-                venue[index].name as string,
+                file.name as string,
                 roomId
               );
-              let venueCommand = getPutObjectCommand(
+              const venueCommand = getPutObjectCommand(
                 fileType,
                 venueFileName,
-                venue[index].mimetype,
-                venue[index].data
+                file.mimetype,
+                file.data
               );
               await uploadRoomImage(venueCommand as PutObjectCommand);
               await addVenueImage(roomId, venueFileName);
-            }) || []
+            })
           ).then((res) => {
             Logging.log(res);
           });
@@ -683,10 +694,11 @@ class RoomController implements Controller {
           const returnUrl = await getIMG(roomId, fileType);
           res.status(201).send({ returnUrl });
           break;
+        }
         case FileType.venueVerification:
           let venueVerificationFileName = generateFilename(
             fileType,
-            flyer?.name as string,
+            venueVerification?.name as string,
             roomId
           );
           const venueVerificationCommand = getPutObjectCommand(
@@ -696,7 +708,7 @@ class RoomController implements Controller {
             venueVerification?.data as Buffer
           );
           await uploadRoomImage(venueVerificationCommand as PutObjectCommand);
-          await addFlyerIMG(roomId, venueVerificationFileName);
+          await addVenueVerificationIMG(roomId, venueVerificationFileName);
           const signedVenueVerificationUrl = await getIMG(roomId, fileType);
           res.status(201).send({ signedVenueVerificationUrl });
           break;

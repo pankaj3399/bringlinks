@@ -11,7 +11,7 @@ import jwksRsa from "jwks-rsa";
 dotenv.config();
 
 const parseAllowedStates = (): string[] => {
-  const raw = process.env.ALLOWED_STATES || "";
+  const raw = validateEnv.ALLOWED_STATES || "";
   return raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -23,9 +23,9 @@ const generateOtp = (): string => {
 };
 
 const sendSms = async (to: string, message: string) => {
-  const sid = process.env.TWILIO_ACCOUNT_SID as string;
-  const token = process.env.TWILIO_AUTH_TOKEN as string;
-  const from = process.env.TWILIO_PHONE_NUMBER as string;
+  const sid = validateEnv.TWILIO_ACCOUNT_SID as string;
+  const token = validateEnv.TWILIO_AUTH_TOKEN as string;
+  const from = validateEnv.TWILIO_PHONE_NUMBER as string;
 
   if (!sid || !token || !from) {
     const missing: string[] = [];
@@ -60,8 +60,8 @@ const sendSms = async (to: string, message: string) => {
 
 const verifyAppleToken = async (idToken: string) => {
   // Dev shortcut: allow locally signed fake token when enabled
-  if ((process.env.ALLOW_FAKE_APPLE_TOKEN || "false").toLowerCase() === "true") {
-    const secret = process.env.APPLE_FAKE_JWT_SECRET || "dev-fake-secret";
+  if ((validateEnv.ALLOW_FAKE_APPLE_TOKEN || "false").toLowerCase() === "true") {
+    const secret = validateEnv.APPLE_FAKE_JWT_SECRET || "dev-fake-secret";
     try {
       const payload: any = jwt.verify(idToken, secret, { algorithms: ["HS256"] });
       const appleUserId = payload.sub || payload.appleUserId || "fake-apple-user";

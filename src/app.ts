@@ -47,6 +47,12 @@ class App {
     this.initializeErrorHandling();
   }
   private initializeMiddleware(): void {
+    this.express.use(fileUpload({
+      limits: { fileSize: 50 * 1024 * 1024 },
+      useTempFiles: true,
+      tempFileDir: require("os").tmpdir(),
+      abortOnLimit: true,
+    }));
     this.express.use(express.json());
     this.express.use(express.urlencoded({ extended: true }));
     this.express.use(bodyParser.json());
@@ -54,11 +60,6 @@ class App {
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
     this.express.use(compression());
-    this.express.use(fileUpload({
-      limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-      useTempFiles: true,
-      tempFileDir: '/tmp/'
-    }));
     this.express.use(session({
       secret: env.COOKIE,
       resave: false,

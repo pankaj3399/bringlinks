@@ -77,6 +77,14 @@ export const getPutObjectCommand = (
         ContentType: mimetype,
       });
       return command;
+    case FileType.venueVerification:
+      command = new PutObjectCommand({
+        Bucket: validateEnv.AWS_AVI_BUCKET_NAME_ROOM_FLYER,
+        Key: imgName,
+        Body: data,
+        ContentType: mimetype,
+      });
+      return command;
     default:
       return new Error("Invalid file type");
   }

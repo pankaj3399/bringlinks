@@ -1,19 +1,18 @@
 import { createClient, RedisClientType } from "redis";
+import { validateEnv } from "../../config/validateEnv";
 
 class RedisClientMiddleware {
   public _redisClient: RedisClientType;
 
   constructor() {
-    if (process.env.NODE_ENV === "production") {
+    const redisUrl = (validateEnv as any).REDIS_URL as string | undefined;
+    const redisUrlTest = (validateEnv as any).REDIS_URL_TEST as string | undefined;
+
+    if (validateEnv.NODE_ENV === "production") {
       // production instance
-      this._redisClient = createClient({
-        url: process.env.REDIS_URL,
-      });
+      this._redisClient = createClient({ url: redisUrl });
     } else {
-      this._redisClient = createClient({
-        // localhost
-        url: process.env.REDIS_URL_TEST,
-      });
+      this._redisClient = createClient({ url: redisUrlTest });
     }
   }
 }

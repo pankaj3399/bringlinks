@@ -159,7 +159,7 @@ const createRoom = async (
 
     await Rooms.updateOne(
       { _id: createdRoom._id },
-      { $addToSet: { created_user, entered_id: created_user } }
+      { $addToSet: { created_user, entered_id: created_user, event_admin: created_user } }
     ).clone();
 
     await User.updateOne(
@@ -704,61 +704,51 @@ export const getIMG = async (id: string, fileType?: FileType) => {
     }
 
     if (fileType === FileType.media) {
-      var returnMedia: IMGNames[] = [];
-      foundRoom.event_media_img.forEach(
-        async (media: IMGNames, index: number) => {
+      const mediaItems = (foundRoom.event_media_img || []).filter(
+        (m: any) => typeof m?.name === "string" && m.name.length > 0
+      );
+      const updated = await Promise.all(
+        mediaItems.map(async (media: IMGNames) => {
           const imgUrl = await retrieveRoomIMG(media.name).catch((err) => {
             Logging.error(err);
             throw err;
           });
-          Logging.warning(imgUrl);
           if (!imgUrl) throw new Error("Image not found");
-          await Rooms.findByIdAndUpdate(
+          await Rooms.updateOne(
             { _id, "event_media_img.name": media.name },
-            {
-              event_media_img: {
-                $addToSet: {
-                  url: imgUrl,
-                },
-              },
-            }
+            { $set: { "event_media_img.$.url": imgUrl } }
           ).catch((err: any) => {
             Logging.error(err);
             throw err;
           });
-          returnMedia.push(foundRoom.event_media_img[index]);
-        }
+          return { name: media.name, url: imgUrl } as IMGNames;
+        })
       );
-      return returnMedia;
+      return updated;
     }
 
     if (fileType === FileType.venue) {
-      var returnVenue: IMGNames[] = [];
-      foundRoom.event_venue_image.forEach(
-        async (media: IMGNames, index: number) => {
+      const venueItems = (foundRoom.event_venue_image || []).filter(
+        (m: any) => typeof m?.name === "string" && m.name.length > 0
+      );
+      const updated = await Promise.all(
+        venueItems.map(async (media: IMGNames) => {
           const imgUrl = await retrieveRoomIMG(media.name).catch((err) => {
             Logging.error(err);
             throw err;
           });
-          Logging.warning(imgUrl);
           if (!imgUrl) throw new Error("Image not found");
-          await Rooms.findByIdAndUpdate(
+          await Rooms.updateOne(
             { _id, "event_venue_image.name": media.name },
-            {
-              event_venue_image: {
-                $addToSet: {
-                  url: imgUrl,
-                },
-              },
-            }
+            { $set: { "event_venue_image.$.url": imgUrl } }
           ).catch((err: any) => {
             Logging.error(err);
             throw err;
           });
-          returnVenue.push(foundRoom.event_venue_image[index]);
-        }
+          return { name: media.name, url: imgUrl } as IMGNames;
+        })
       );
-      return returnVenue;
+      return updated;
     }
 
     if (fileType === FileType.venueVerification) {
