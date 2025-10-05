@@ -11,6 +11,7 @@ import { Iitinerary } from "resources/room/itinerary/itinerary.interface";
 import { IWallet } from "resources/wallet/wallet.interface";
 import { IFriends } from "resources/user/friends/friends.interface";
 import { IReport } from "resources/report/report.interface";
+import { ICreatorSignupRequest, ICreatorRegistrationRequest } from "../resources/user/creator/creator.interface";
 
 function ValidationMiddleware(
   schema: Joi.Schema<
@@ -24,6 +25,8 @@ function ValidationMiddleware(
     | IWallet
     | IFriends
     | Partial<IReport>
+    | ICreatorSignupRequest
+    | ICreatorRegistrationRequest
   >
 ): RequestHandler {
   return async (

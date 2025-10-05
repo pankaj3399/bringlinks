@@ -1,3 +1,4 @@
+/*
 import axios from "axios";
 import { validateEnv } from "../../../config/validateEnv";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
@@ -74,4 +75,8 @@ class HelcimService {
   };
 }
 
+export default new HelcimService();
+*/
+
+class HelcimService {}
 export default new HelcimService();

@@ -15,7 +15,6 @@ import { FileType } from "../../utils/ImageServices/helperFunc.ts/room.Img";
 import PaidRoom from "./paidRooms/paidRoom.model";
 import { IPaidRooms, PricingTiers } from "./paidRooms/paidRoom.interface";
 import { str } from "envalid";
-import { createPaidRoom } from "./paidRooms/paidRoom.service";
 import QRCode from "qrcode";
 import { validateEnv } from "../../../config/validateEnv";
 
@@ -172,9 +171,6 @@ const createRoom = async (
       },
       { new: true }
     ).exec();
-
-    if (room.paid)
-      await createPaidRoom(createdRoom._id, paidRoom as Partial<IPaidRooms>);
 
     return await createdRoom.populate({
       path: "created_user",

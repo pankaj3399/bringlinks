@@ -42,7 +42,9 @@ export const postPermissions = async (
 ) => {
   try {
     const { userid, postid } = req.params;
-    if (!userid || !postid) res.status(400).send("Id is required");
+    if (!userid || !postid) {
+      return res.status(400).json({ message: "User ID and Post ID are required" });
+    }
     const user_Id = userid as string;
     const post_Id = postid as string;
     const foundUserPost = await Posts.findOne({
@@ -66,8 +68,9 @@ export const commentPermissions = async (
 ) => {
   try {
     const { userid, postid, commentid } = req.params;
-    if (!userid || !postid || !commentid)
-      res.status(400).send("Id is required");
+    if (!userid || !postid || !commentid) {
+      return res.status(400).json({ message: "User ID, Post ID, and Comment ID are required" });
+    }
     const user_Id = userid as string;
     const post_Id = postid as string;
     const comment_Id = commentid as string;
@@ -96,7 +99,9 @@ export const likePermissions = async (
 ) => {
   try {
     const { userid, postid, likeid } = req.params;
-    if (!userid || !postid || !likeid) res.status(400).send("Id is required");
+    if (!userid || !postid || !likeid) {
+      return res.status(400).json({ message: "User ID, Post ID, and Like ID are required" });
+    }
 
     const user_Id = userid as string;
     const post_Id = postid as string;
@@ -125,7 +130,9 @@ export const isRoomPrivate = async (
 ) => {
   try {
     const { roomId } = req.params;
-    if (!roomId) res.status(400).send("Id is required");
+    if (!roomId) {
+      return res.status(400).json({ message: "Room ID is required" });
+    }
     const room_Id = roomId as string;
     const foundRoom = await Rooms.findOne({
       _id: room_Id,
@@ -152,7 +159,9 @@ export const enteredRoomPermissions = async (
 ) => {
   try {
     const { userId, roomId } = req.params;
-    if (!userId || !roomId) res.status(400).send("Id is required");
+    if (!userId || !roomId) {
+      return res.status(400).json({ message: "User ID and Room ID are required" });
+    }
 
     const user_Id = userId as string;
     const room_Id = roomId as string;
@@ -181,7 +190,9 @@ export const friendshipPermissions = async (
 ) => {
   try {
     const { userId, friendId } = req.params;
-    if (!userId || !friendId) res.status(400).send("Id is required");
+    if (!userId || !friendId) {
+      return res.status(400).json({ message: "User ID and Friend ID are required" });
+    }
     const user_Id = userId as string;
     const friend_Id = friendId as string;
 
@@ -215,7 +226,9 @@ export const roomAdminPermissions = async (
 ) => {
   try {
     const { userId, roomId } = req.params;
-    if (!userId || !roomId) res.status(400).send("Id is required");
+    if (!userId || !roomId) {
+      return res.status(400).json({ message: "User ID and Room ID are required" });
+    }
     const user_Id = userId as string;
     const room_Id = roomId as string;
 
@@ -243,7 +256,9 @@ export const isInvitedPermissions = async (
 ) => {
   try {
     const { userId, roomId } = req.params;
-    if (!userId || !roomId) res.status(400).send("Id is required");
+    if (!userId || !roomId) {
+      return res.status(400).json({ message: "User ID and Room ID are required" });
+    }
     const user_Id = userId as string;
     const room_Id = roomId as string;
 
@@ -253,7 +268,9 @@ export const isInvitedPermissions = async (
       { event_invitees: user_Id }
     ).clone();
 
-    if (!foundRoom) res.status(401).send("This id isn't a User in this Room");
+    if (!foundRoom) {
+      return res.status(401).json({ message: "This user is not in this room" });
+    }
 
     next();
   } catch (error: any) {
@@ -270,7 +287,9 @@ export const walletPermissions = async (
 ) => {
   try {
     const { userId, walletId } = req.params;
-    if (!userId || !walletId) res.status(400).send("Id is required");
+    if (!userId || !walletId) {
+      return res.status(400).json({ message: "User ID and Wallet ID are required" });
+    }
 
     const user_Id = userId as string;
     const wallet_Id = walletId as string;
@@ -280,7 +299,45 @@ export const walletPermissions = async (
       wallet: wallet_Id,
     }).exec();
 
-    if (!foundUser) res.status(401).send("User wallet not found");
+    if (!foundUser) {
+      return res.status(401).json({ message: "User wallet not found" });
+    }
+
+    next();
+  } catch (error: any) {
+    Logging.error(error);
+    throw error;
+  }
+};
+
+export const creatorPermissions = async(
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { userId } = req.params;
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    const user_Id = userId as string;
+    const authUserId = String(req.user?._id);
+
+    if (user_Id !== authUserId) {
+      return res.status(403).json({ message: "Must have valid user id" });
+    }
+
+    const foundUser = await User.findOne({
+      _id: user_Id,
+      role: "CREATOR"
+    }).clone();
+
+    if (!foundUser) {
+      return res.status(403).json({ 
+        message: "User must be a creator to create paid rooms" 
+      });
+    }
 
     next();
   } catch (error: any) {

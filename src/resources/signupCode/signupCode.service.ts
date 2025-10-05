@@ -2,7 +2,6 @@ import SignupCode from "./signupCode.model";
 import { ISignupCodeDocument } from "./signupCode.interface";
 import Logging from "../../library/logging";
 
-// Generate a random 6-digit alphanumeric code
 const generateRandomCode = (): string => {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let result = '';
@@ -12,7 +11,6 @@ const generateRandomCode = (): string => {
   return result;
 };
 
-// Generate a new signup code
 export const generateSignupCode = async (
   adminId: string,
   maxUsages: number,
@@ -22,7 +20,6 @@ export const generateSignupCode = async (
     let code: string;
     let existingCode: ISignupCodeDocument | null;
 
-    // Generate unique code
     do {
       code = generateRandomCode();
       existingCode = await SignupCode.findOne({ code });
@@ -45,7 +42,6 @@ export const generateSignupCode = async (
   }
 };
 
-// Validate and use a signup code
 export const validateAndUseSignupCode = async (code: string): Promise<boolean> => {
   try {
     const signupCode = await SignupCode.findActiveCode(code);
@@ -60,7 +56,6 @@ export const validateAndUseSignupCode = async (code: string): Promise<boolean> =
       return false;
     }
 
-    // Increment usage
     const updatedCode = await SignupCode.incrementUsage(code);
     
     if (!updatedCode) {
@@ -76,7 +71,6 @@ export const validateAndUseSignupCode = async (code: string): Promise<boolean> =
   }
 };
 
-// Get all signup codes for an admin
 export const getSignupCodesByAdmin = async (adminId: string): Promise<ISignupCodeDocument[]> => {
   try {
     const codes = await SignupCode.find({ createdBy: adminId })
@@ -89,7 +83,6 @@ export const getSignupCodesByAdmin = async (adminId: string): Promise<ISignupCod
   }
 };
 
-// Get all active signup codes (admin only)
 export const getAllActiveSignupCodes = async (): Promise<ISignupCodeDocument[]> => {
   try {
     const codes = await SignupCode.find({ 
@@ -110,7 +103,6 @@ export const getAllActiveSignupCodes = async (): Promise<ISignupCodeDocument[]> 
   }
 };
 
-// Update a signup code
 export const updateSignupCode = async (
   codeId: string,
   adminId: string,
@@ -136,7 +128,6 @@ export const updateSignupCode = async (
   }
 };
 
-// Deactivate a signup code
 export const deactivateSignupCode = async (
   codeId: string,
   adminId: string

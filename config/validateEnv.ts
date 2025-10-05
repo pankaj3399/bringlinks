@@ -53,9 +53,9 @@ export const validateEnv = cleanEnv(process.env, {
   HELCIM_API_KEY: str(),
   // New auth/env vars
   ALLOWED_STATES: str({ default: "" }),
-  TWILIO_ACCOUNT_SID: str({ default: "" }),
-  TWILIO_AUTH_TOKEN: str({ default: "" }),
-  TWILIO_PHONE_NUMBER: str({ default: "" }),
+  // TWILIO_ACCOUNT_SID: str({ default: "" }),
+  // TWILIO_AUTH_TOKEN: str({ default: "" }),
+  // TWILIO_PHONE_NUMBER: str({ default: "" }),
   // APPLE_CLIENT_ID: str({ default: "" }),
   // APPLE_TEAM_ID: str({ default: "" }),
   // APPLE_KEY_ID: str({ default: "" }),
@@ -68,4 +68,8 @@ export const validateEnv = cleanEnv(process.env, {
   GOOGLE_CLIENT_SECRET: str({ default: "" }),
   GOOGLE_CALLBACK_URL: str({ default: "" }),
   ADMIN_REGISTRATION_SECRET: str({ default: "" }),
+  STRIPE_SECRET_KEY: str({ default: "" }),
+  STRIPE_PUBLISHABLE_KEY: str({ default: "" }),
+  STRIPE_WEBHOOK_SECRET: str({ default: "" }),
+  FORCE_CREATOR_ELIGIBLE: str({ default: "false" }),
 });

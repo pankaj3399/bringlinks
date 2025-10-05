@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 import { validateEnv } from "../../../config/validateEnv";
 import Logging from "../../library/logging";
-import OtpVerification from "./otp.model";
+// import OtpVerification from "./otp.model";
 import User from "../user/user.model";
 import jwtToken from "../../utils/authentication/jwt.createtoken";
 import axios from "axios";
@@ -62,6 +62,7 @@ const generateOtp = (): string => {
 //   }
 // };
 
+// COMMENTED OUT - Apple id signup disabled 
 // const verifyAppleToken = async (idToken: string) => {
 //   // Dev shortcut: allow locally signed fake token when enabled
 //   if ((validateEnv.ALLOW_FAKE_APPLE_TOKEN || "false").toLowerCase() === "true") {
@@ -133,7 +134,7 @@ class AuthService {
     };
   }
 
-  // COMMENTED OUT - OTP verification disabled for signup code implementation
+  
   // static async verifyOtp(phoneNumber: string, otp: string) {
   //   const record = await OtpVerification.findOne({ phoneNumber }).exec();
   //   if (!record || record.otp !== otp) {

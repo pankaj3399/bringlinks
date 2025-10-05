@@ -226,29 +226,153 @@ export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
   }
 };
 
-export const createPaidRoom = async (
-  roomId: string,
-  paidRoom: Partial<IPaidRooms>
+export const createNewPaidRoom = async (
+  userId: string,
+  roomData: {
+    name?: string;
+    description?: string;
+    isPrivate?: boolean;
+    ticketPrice: number;
+    maxTickets: number;
+    ticketTiers?: Array<{
+      name: string;
+      price: number;
+      quantity: number;
+    }>;
+    event_type?: string;
+    event_typeOther?: string | null;
+    event_name?: string;
+    event_location_address?: {
+      street_address?: string;
+      address_line2?: string;
+      city?: string;
+      state?: string;
+      zipcode?: string;
+      country?: string;
+    };
+    event_location?: {
+      type?: string;
+      coordinates?: number[]; 
+      venue?: string;
+    };
+    event_description?: string;
+    event_schedule?: {
+      startDate?: string | Date;
+      endDate?: string | Date;
+    };
+    event_privacy?: string;
+  }
 ) => {
   try {
-    const room_Id = roomId as string;
-    const foundRoom = await Rooms.findById(room_Id);
+    const now = new Date();
+    const startDate = roomData.event_schedule?.startDate
+      ? new Date(roomData.event_schedule.startDate)
+      : now;
+    const endDate = roomData.event_schedule?.endDate
+      ? new Date(roomData.event_schedule.endDate)
+      : new Date(now.getTime() + 60 * 60 * 1000); 
 
-    if (!foundRoom) throw new Error("Room not found");
+    const eventType = roomData.event_type || "Other";
+    const eventTypeOther = eventType === "Other" ? (roomData.event_typeOther || "Other") : undefined as any;
 
-    const paid_Room = await PaidRoom.create({
-      roomId: room_Id,
-      tickets: {
-        ticketsTotal: paidRoom.tickets?.ticketsTotal,
-        $addToSet: {
-          pricing: paidRoom.tickets?.pricing,
-        },
-      },
+    const eventName = roomData.event_name || roomData.name || "Untitled Room";
+    const eventDescription = roomData.event_description || roomData.description || "Description";
+
+    const coords = roomData.event_location?.coordinates || [0, 0];
+    const eventLocation = {
+      type: roomData.event_location?.type || "Point",
+      coordinates: coords,
+      venue: roomData.event_location?.venue || "",
+    } as any;
+
+    const eventAddress = {
+      street_address: roomData.event_location_address?.street_address || "123 Test St",
+      address_line2: roomData.event_location_address?.address_line2 || "",
+      city: roomData.event_location_address?.city || "Test City",
+      state: roomData.event_location_address?.state || "CA",
+      zipcode: roomData.event_location_address?.zipcode || "94107",
+      country: roomData.event_location_address?.country || "US",
+    };
+
+    const privacy = roomData.event_privacy || "public";
+
+    const newRoom = await Rooms.create({
+      event_admin: [new mongoose.Types.ObjectId(userId)],
+      event_type: eventType,
+      event_typeOther: eventTypeOther,
+      event_name: eventName,
+      event_location_address: eventAddress,
+      event_location: eventLocation,
+      event_description: eventDescription,
+      event_schedule: { startDate, endDate },
+      event_privacy: privacy,
+      paid: true,
+      created_user: new mongoose.Types.ObjectId(userId),
     });
 
-    if (!paid_Room) throw new Error("Paid room not created");
+    if (!newRoom) throw new Error("Room not created");
 
-    return paid_Room;
+    // Create the paid room configuration
+    const mapTierNameToEnum = (name: string): string => {
+      const normalized = (name || "").toLowerCase();
+      if (normalized.includes("premium") && normalized.includes("vip")) return "Premium Vip";
+      if (normalized.includes("ultimate") && normalized.includes("vip")) return "Ultimate Vip";
+      if (normalized.includes("early")) return "Early Bird";
+      if (normalized.includes("last")) return "Last Minute";
+      if (normalized.includes("vip")) return "Vip";
+      return "General Admission";
+    };
+
+    const pricing = (roomData.ticketTiers && roomData.ticketTiers.length > 0)
+      ? roomData.ticketTiers.map((t) => ({
+          tiers: mapTierNameToEnum(t.name),
+          title: t.name || "General Admission",
+          description: t.name || "General Admission",
+          price: t.price,
+          total: t.quantity,
+          available: t.quantity,
+          sold: 0,
+          active: true,
+        }))
+      : [{
+          tiers: "General Admission",
+          title: "General Admission",
+          description: "General Admission",
+          price: roomData.ticketPrice,
+          total: roomData.maxTickets,
+          available: roomData.maxTickets,
+          sold: 0,
+          active: true,
+        }];
+
+    const paidRoomData = {
+      roomId: newRoom._id,
+      tickets: {
+        ticketsTotal: roomData.maxTickets,
+        totalTicketsAvailable: roomData.maxTickets,
+        totalSold: 0,
+        totalRevenue: 0,
+        pricing,
+      },
+    };
+
+    const paidRoom = await PaidRoom.create(paidRoomData);
+
+    if (!paidRoom) {
+      // Rollback: delete the room if paid room creation fails
+      await Rooms.findByIdAndDelete(newRoom._id);
+      throw new Error("Paid room not created");
+    }
+
+    // Update the room with the paid room reference
+    await Rooms.findByIdAndUpdate(newRoom._id, {
+      paidRoom: paidRoom._id,
+    });
+
+    return {
+      room: newRoom,
+      paidRoom: paidRoom,
+    };
   } catch (err) {
     Logging.error(err);
     throw err;

@@ -8,8 +8,8 @@ export interface IUsers extends Document {
   refreshToken: string;
   phoneNumber?: string;
   state?: string;
-  otp?: string;
-  otpExpiry?: Date;
+  // otp?: string;
+  // otpExpiry?: Date;
   isVerified?: boolean;
   signupCode?: string; // For registration validation only
   // appleId?: string;

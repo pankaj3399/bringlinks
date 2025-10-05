@@ -7,6 +7,9 @@ export interface ISignupCode {
   isActive: boolean;
   createdBy: string; // Admin user ID
   expiresAt?: Date;
+  isUsed?: boolean; 
+  usedBy?: string; 
+  usedAt?: Date; 
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,45 +1,81 @@
 import mongoose, { Document, Model } from "mongoose";
+import { IRoles } from "../user.interface";
 
-interface ICreator extends Document {
+export enum StripeAccountStatus {
+  PENDING = "pending",
+  ACTIVE = "active",
+  RESTRICTED = "restricted",
+}
+
+export interface ICreator extends Document {
   userId: mongoose.Types.ObjectId;
+  signupCode: string;  
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
+  stripeConnectAccountId?: string;
+  stripeAccountStatus?: StripeAccountStatus;
+  stripeAccountLink?: string; 
   reviews: IReviews[];
   createdRooms: mongoose.Types.ObjectId[];
   userScore: Score;
   totalReviews: number;
   totalRoomsCreated: number;
   activeRooms: number;
+  totalEarnings: number;
+  totalPayouts: number;
+  pendingBalance: number;
+}
+
+export interface ICreatorRegistrationRequest {
+  userId: string;
+  signupCode: string; 
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
+}
+
+export interface ICreatorSignupRequest {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  state: string;
+  signupCode: string; 
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
+}
+
+export interface IStripeConnectOnboardingResponse {
+  accountId: string;
+  accountLink: string;
+  status: StripeAccountStatus;
+}
+
+export interface ICreatorEligibilityResponse {
+  canCreate: boolean;
+  reason?: string;
+  redirectTo?: string;
+  action?: string;
 }
 
 export interface IReviews {
-  roomId: mongoose.Types.ObjectId;
-  overallRating: number;
-  review: Review[];
-}
-
-export type Review = {
-  roomId: mongoose.Types.ObjectId;
+  userId: mongoose.Types.ObjectId;
   rating: number;
-  review: string;
-};
-
-export enum Score {
-  One = 1,
-  Two = 2,
-  Three = 3,
-  Four = 4,
-  Five = 5,
-  Six = 6,
-  Seven = 7,
-  Eight = 8,
-  Nine = 9,
-  Ten = 10,
+  comment: string;
+  createdAt: Date;
 }
 
-export interface CreatorDocument extends ICreator, Document {
-  // instance queries
+export interface Score {
+  average: number;
+  count: number;
 }
 
-export interface CreatorModel extends Model<CreatorDocument> {
-  // Schema Queries
-  findCreatorById: (_id: string) => Promise<CreatorDocument>;
+export interface ICreatorDocument extends ICreator, Document {}
+
+export interface ICreatorModel extends Model<ICreatorDocument> {
+  findCreatorById(_id: string): Promise<ICreatorDocument | null>;
 }
+
+export default ICreator;

@@ -4,30 +4,25 @@ import jwt from "../../utils/authentication/jwt.createtoken";
 import Logging from "../../library/logging";
 import { validateEnv } from "../../../config/validateEnv";
 
-// Special admin registration - should be protected by environment variable
 export const registerAdmin = async (userData: any) => {
   try {
     const { auth, adminSecret, ...userProfile } = userData;
 
-    // Check admin secret (set this in your environment variables)
-    const requiredSecret = validateEnv.ADMIN_REGISTRATION_SECRET || "CHANGE_THIS_SECRET";
+    const requiredSecret = validateEnv.ADMIN_REGISTRATION_SECRET;
     if (adminSecret !== requiredSecret) {
       throw new Error("Invalid admin registration secret");
     }
 
-    // Check if username is already taken
     const foundUser: IUserDocument = await User.findByUsername(auth.username);
     if (foundUser) {
       throw new Error("The given username is already in use");
     }
 
-    // Check if email is already taken
     const foundEmail = await User.findOne({ "auth.email": auth.email });
     if (foundEmail) {
       throw new Error("The given email is already in use");
     }
 
-    // Create admin user
     const userToCreate = {
       auth,
       profile: userProfile.profile,

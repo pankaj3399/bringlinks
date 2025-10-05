@@ -20,6 +20,7 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "./resources/user/user.model";
 import { validateEnv as env } from "../config/validateEnv";
+import stripeWebhook from "./resources/user/creator/stripe.webhook";
 
 class App {
   public express: Application;
@@ -264,6 +265,8 @@ class App {
     Logging.log(`Socket is ready`);
   }
   private initializeControllers(controllers: Controller[]): void {
+    this.express.use("/", stripeWebhook);
+    
     controllers.forEach((controller: Controller) => {
       this.express.use(controller.router);
     });
