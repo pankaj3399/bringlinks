@@ -37,6 +37,24 @@ class PaidRoomController implements Controller {
       creatorPermissions,
       this.createNewPaidRoom
     );
+    this.router.post(
+      `${this.path}/rooms/:userId/:roomId/checkout`,
+      RequiredAuth,
+      isUserAccount,
+      this.startCheckout
+    );
+    this.router.get(
+      `/creator/:userId/stripe/login-link`,
+      RequiredAuth,
+      isUserAccount,
+      this.getCreatorStripeLoginLink
+    );
+    this.router.post(
+      `/creator/:userId/stripe/payout`,
+      RequiredAuth,
+      isUserAccount,
+      this.createCreatorPayout
+    );
     this.router.patch(
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
@@ -86,6 +104,106 @@ class PaidRoomController implements Controller {
       this.vaultCard
     );
   }
+  private startCheckout = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const userId = req.user?._id; 
+      const { roomId } = req.params;
+      const { quantity = 1, tierName, successUrl, cancelUrl } = req.body;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+
+      const { default: Rooms } = await import("../room.model");
+      const roomDoc = await Rooms.findById(roomId).select("created_user");
+      if (!roomDoc) return res.status(404).json({ message: "Room not found" });
+      const creatorUserId = String((roomDoc as any).created_user);
+
+      const eligibility = await canCreatePaidRooms(creatorUserId);
+      if (!eligibility.canCreate) {
+        return res.status(403).json({ success: false, message: eligibility.reason });
+      }
+
+      const paidRoom = await getPaidRoom(roomId);
+      const tiers = paidRoom.tickets.pricing || [];
+      const selected = tierName ? tiers.find((t: any) => t.title === tierName || t.tiers === tierName) : tiers[0];
+      if (!selected) return res.status(400).json({ message: "Tier not found" });
+      if (selected.available < quantity) return res.status(400).json({ message: "Not enough tickets available" });
+      const ticketAmount = selected.price;
+
+      const metadata = {
+        roomId: String(roomId),
+        userId: String(userId),
+        tier: selected.tiers,
+        tierTitle: selected.title,
+        quantity: String(quantity),
+      } as Record<string, string>;
+
+      
+      const { default: Creator } = await import("../../user/creator/creator.model");
+      const creator = await Creator.findOne({ userId: creatorUserId });
+      if (!creator || !creator.stripeConnectAccountId) {
+        return res.status(403).json({ message: "Stripe Connect account required" });
+      }
+
+      const session = await (await import("../../../utils/stripe/stripe.service")).default.createCheckoutSession({
+        amount: ticketAmount,
+        currency: "usd",
+        connectedAccountId: creator.stripeConnectAccountId,
+        successUrl,
+        cancelUrl,
+        quantity,
+        productName: "Room Ticket",
+        metadata,
+      } as any);
+
+      return res.status(200).json({ success: true, checkoutSessionId: session.id, url: session.url });
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private getCreatorStripeLoginLink = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const userId = req.user?._id;
+      const { default: Creator } = await import("../../user/creator/creator.model");
+      const creator = await Creator.findOne({ userId });
+      if (!creator || !creator.stripeConnectAccountId) {
+        return res.status(404).json({ message: "Creator Stripe account not found" });
+      }
+      const loginLink = await (await import("../../../utils/stripe/stripe.service")).default.createLoginLink(creator.stripeConnectAccountId);
+      return res.status(200).json({ success: true, url: loginLink.url });
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private createCreatorPayout = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const userId = req.user?._id;
+      const { amountCents } = req.body;
+      if (!amountCents || amountCents <= 0) return res.status(400).json({ message: "amountCents required" });
+      const { default: Creator } = await import("../../user/creator/creator.model");
+      const creator = await Creator.findOne({ userId });
+      if (!creator || !creator.stripeConnectAccountId) {
+        return res.status(404).json({ message: "Creator Stripe account not found" });
+      }
+      const payout = await (await import("../../../utils/stripe/stripe.service")).default.createPayout(creator.stripeConnectAccountId, amountCents, "usd");
+      return res.status(200).json({ success: true, payout });
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
 
   private createNewPaidRoom = async (
     req: Request,

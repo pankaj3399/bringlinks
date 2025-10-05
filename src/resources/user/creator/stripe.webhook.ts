@@ -4,6 +4,7 @@ import { validateEnv } from "../../../../config/validateEnv";
 import Creator from "./creator.model";
 import Logging from "../../../library/logging";
 import { StripeAccountStatus } from "./creator.interface";
+import PaidRoom from "../../room/paidRooms/paidRoom.model";
 
 const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
 if (!stripeApiKey) {
@@ -31,6 +32,9 @@ router.post("/stripe/webhook", async (req: Request, res: Response) => {
 
   try {
     switch (event.type) {
+      case "checkout.session.completed":
+        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        break;
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
         break;
@@ -111,6 +115,39 @@ async function handleCapabilityUpdated(capability: Stripe.Capability) {
 }
 
 export default router;
+
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  try {
+    const metadata = (session.metadata || {}) as Record<string, string>;
+    const roomId = metadata.roomId;
+    const userId = metadata.userId;
+    const tierTitle = metadata.tierTitle;
+    const quantity = parseInt(metadata.quantity || "1", 10) || 1;
+    if (!roomId || !userId) return;
+
+    const paidRoom = await PaidRoom.findOne({ roomId });
+    if (!paidRoom) return;
+
+    const pricing = paidRoom.tickets?.pricing || [] as any[];
+    const idx = pricing.findIndex((p: any) => p.title === tierTitle || p.tiers === tierTitle);
+    const target = idx >= 0 ? pricing[idx] : pricing[0];
+    if (target) {
+      target.sold += quantity;
+      target.available = Math.max(0, target.available - quantity);
+    }
+    paidRoom.tickets.totalSold += quantity;
+    paidRoom.tickets.totalTicketsAvailable = Math.max(0, paidRoom.tickets.totalTicketsAvailable - quantity);
+    if (!paidRoom.receiptId) paidRoom.receiptId = [] as any;
+    const pi = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    if (pi) (paidRoom.receiptId as any).push(pi);
+    if (!paidRoom.paidUsers) paidRoom.paidUsers = [] as any;
+    (paidRoom.paidUsers as any).push(userId);
+
+    await paidRoom.save();
+  } catch (error: any) {
+    Logging.error(`Checkout fulfillment error: ${error.message}`);
+  }
+}
 
 
 

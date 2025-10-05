@@ -9,12 +9,20 @@ export const getPaidRoom = async (roomId: string) => {
     const room = await Rooms.findById(roomId).populate({
       path: "paidRoom",
       model: "PaidRooms",
-      select: "-receiptId ",
+      select: "tickets",
     });
 
     if (!room) throw new Error("Room not found");
 
-    const paidRoom = await PaidRoom.findOne({ roomId: room._id });
+    const populated = (room as any).paidRoom;
+    if (populated) {
+      return populated;
+    }
+
+    let paidRoom = await PaidRoom.findOne({ "tickets.roomId": room._id });
+    if (!paidRoom) {
+      paidRoom = await PaidRoom.findOne({ roomId: room._id as any });
+    }
     if (!paidRoom) throw new Error("Paid room not found");
 
     return paidRoom;
@@ -312,7 +320,6 @@ export const createNewPaidRoom = async (
 
     if (!newRoom) throw new Error("Room not created");
 
-    // Create the paid room configuration
     const mapTierNameToEnum = (name: string): string => {
       const normalized = (name || "").toLowerCase();
       if (normalized.includes("premium") && normalized.includes("vip")) return "Premium Vip";
@@ -346,12 +353,12 @@ export const createNewPaidRoom = async (
         }];
 
     const paidRoomData = {
-      roomId: newRoom._id,
       tickets: {
         ticketsTotal: roomData.maxTickets,
         totalTicketsAvailable: roomData.maxTickets,
         totalSold: 0,
         totalRevenue: 0,
+        roomId: newRoom._id,
         pricing,
       },
     };
@@ -359,12 +366,10 @@ export const createNewPaidRoom = async (
     const paidRoom = await PaidRoom.create(paidRoomData);
 
     if (!paidRoom) {
-      // Rollback: delete the room if paid room creation fails
       await Rooms.findByIdAndDelete(newRoom._id);
       throw new Error("Paid room not created");
     }
 
-    // Update the room with the paid room reference
     await Rooms.findByIdAndUpdate(newRoom._id, {
       paidRoom: paidRoom._id,
     });

@@ -175,6 +175,70 @@ export class StripeService {
       throw new Error(`Failed to list transfers: ${error.message}`);
     }
   }
+
+  static async createCheckoutSession(params: {
+    amount: number; 
+    currency?: string;
+    connectedAccountId: string;
+    successUrl: string;
+    cancelUrl: string;
+    quantity?: number;
+    metadata?: Record<string, string>;
+    productName?: string;
+  }) {
+    const {
+      amount,
+      currency = "usd",
+      connectedAccountId,
+      successUrl,
+      cancelUrl,
+      quantity = 1,
+      metadata = {},
+      productName = "Room Ticket",
+    } = params;
+
+    const unitAmount = Math.round(amount * 100);
+    const appFee = Math.round(amount * quantity * 0.1 * 100);
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      line_items: [
+        {
+          price_data: {
+            currency,
+            unit_amount: unitAmount,
+            product_data: { name: productName },
+          },
+          quantity,
+        },
+      ],
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        ...metadata,
+        platform: "bringlinks",
+      },
+      payment_intent_data: {
+        application_fee_amount: appFee,
+        transfer_data: {
+          destination: connectedAccountId,
+        },
+        metadata: {
+          ...metadata,
+          platform: "bringlinks",
+        },
+      },
+    });
+
+    return session;
+  }
+
+  static async createPayout(connectedAccountId: string, amountCents: number, currency: string = "usd") {
+    const payout = await stripe.payouts.create({ amount: amountCents, currency }, {
+      stripeAccount: connectedAccountId,
+    });
+    return payout;
+  }
 }
 
 export default StripeService;
