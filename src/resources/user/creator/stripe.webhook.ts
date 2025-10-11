@@ -144,6 +144,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     (paidRoom.paidUsers as any).push(userId);
 
     await paidRoom.save();
+
+    try {
+      const { createEntryQRCode } = await import("../../room/room.service");
+      const ticketId = `ticket_${session.id}_${Date.now()}`;
+      const entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
+      
+      Logging.log(`Entry QR code generated for user ${userId} for room ${roomId}`);
+      
+    } catch (qrError: any) {
+      Logging.error(`Entry QR code generation error: ${qrError.message}`);
+    }
   } catch (error: any) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
   }

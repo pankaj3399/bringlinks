@@ -317,10 +317,14 @@ class PaidRoomController implements Controller {
         return res.status(400).json({ message: "Paid room not created" });
       }
 
+      const { createRoomQRCode } = await import("../room.service");
+      const qrCode = await createRoomQRCode(createdPaidRoom.room._id);
+
       res.status(201).json({
         success: true,
         message: "Paid room created successfully",
         paidRoom: createdPaidRoom,
+        qrCode: qrCode,
       });
     } catch (err: any) {
       next(new HttpException(400, err.message));

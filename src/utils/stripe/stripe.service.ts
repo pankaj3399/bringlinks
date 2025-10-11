@@ -13,6 +13,12 @@ const stripe = new Stripe(stripeApiKey, {
 
 export class StripeService {
  
+  private static getPlatformFeeRate(unitAmountUsd: number): number{
+    if (unitAmountUsd <= 60) return 0.06; 
+    if (unitAmountUsd <= 90) return 0.047; 
+    return 0.037; 
+  }
+
   static async createConnectAccount(userId: string, email: string, country: string = "US") {
     try {
       const account = await stripe.accounts.create({
@@ -104,10 +110,11 @@ export class StripeService {
     metadata: Record<string, string> = {}
   ) {
     try {
+      const platformFeeRate = this.getPlatformFeeRate(amount);
       const paymentIntent = await stripe.paymentIntents.create({
         amount: Math.round(amount * 100), 
         currency: currency,
-        application_fee_amount: Math.round(amount * 0.1 * 100), 
+        application_fee_amount: Math.round(amount *platformFeeRate * 100), 
         transfer_data: {
           destination: connectedAccountId,
         },
@@ -198,7 +205,8 @@ export class StripeService {
     } = params;
 
     const unitAmount = Math.round(amount * 100);
-    const appFee = Math.round(amount * quantity * 0.1 * 100);
+    const platformFeeRate = this.getPlatformFeeRate(amount);
+    const appFee = Math.round(amount * quantity * platformFeeRate * 100);
 
     const session = await stripe.checkout.sessions.create({
       mode: "payment",

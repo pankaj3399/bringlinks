@@ -29,7 +29,16 @@ import {
   unInviteAUser,
   updateRoom,
   getQRCode,
+  createPurchaseQRCode,
+  createEntryQRCode,
 } from "./room.service";
+import {
+  generateShareLinks,
+  trackShare,
+  trackClick,
+  getRoomShareAnalytics
+} from "./share.service";
+import { SharePlatform, ShareType } from "./share.model";
 import validationMiddleware from "../../middleware/val.middleware";
 import validate from "./room.validation";
 import {
@@ -202,6 +211,43 @@ class RoomController implements Controller {
       isRoomPrivate,
       this.getRoomQRCode
     );
+    this.router.get(
+      `${this.path}/purchase-qr/:roomId`,
+      RequiredAuth,
+      isUserAccount,
+      this.getPurchaseQRCode
+    );
+    this.router.get(
+      `${this.path}/purchase-qr-public/:roomId`,
+      this.getPurchaseQRCodePublic
+    );
+    this.router.get(
+      `${this.path}/entry-qr/:roomId/:userId`,
+      RequiredAuth,
+      isUserAccount,
+      this.getEntryQRCode
+    );
+    this.router.get(
+      `${this.path}/:roomId/share-links`,
+      this.getShareLinks
+    );
+    this.router.post(
+      `${this.path}/:roomId/share`,
+      this.trackShare
+    );
+    this.router.get(
+      `${this.path}/:roomId/share-analytics`,
+      RequiredAuth,
+      this.getShareAnalytics
+    );
+    this.router.get(
+      `${this.path}/share/:platform/:encodedUrl`,
+      this.handleShareClick
+    );
+    this.router.get(
+      `${this.path}/:roomId`,
+      this.getRoomByIdPublic
+    );
   }
 
   private uploadMediaIMG = async (
@@ -273,6 +319,73 @@ class RoomController implements Controller {
     }
   };
 
+  private getPurchaseQRCode = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      const { tier } = req.query;
+      
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+      if (!tier) return res.status(400).json({ message: "Tier name is required" });
+
+      const qrCode = await createPurchaseQRCode(roomId, tier as string);
+      if (!qrCode) return res.status(400).json({ message: "Purchase QR code not found" });
+
+      res.status(200).json({ qrCode, type: "purchase" });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private getPurchaseQRCodePublic = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      const { tier } = req.query;
+      
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+      if (!tier) return res.status(400).json({ message: "Tier name is required" });
+
+      if (!roomId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid room ID format" });
+      }
+
+      const qrCode = await createPurchaseQRCode(roomId, tier as string);
+      if (!qrCode) return res.status(400).json({ message: "Purchase QR code not found" });
+
+      res.status(200).json({ qrCode, type: "purchase" });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private getEntryQRCode = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId, userId } = req.params;
+      const { ticketId } = req.query;
+      
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+      if (!userId) return res.status(400).json({ message: "User ID is required" });
+
+      const qrCode = await createEntryQRCode(roomId, userId, ticketId as string);
+      if (!qrCode) return res.status(400).json({ message: "Entry QR code not found" });
+
+      res.status(200).json({ qrCode, type: "entry" });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
   private getRoomById = async (
     req: Request,
     res: Response,
@@ -289,6 +402,50 @@ class RoomController implements Controller {
 
       Logging.info(room);
       res.status(200).json(room);
+    } catch (err: any) {
+      Logging.error(err);
+      next(new HttpException(404, err.message));
+    }
+  };
+
+  private getRoomByIdPublic = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+
+      if (!roomId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid room ID format" });
+      }
+
+      const room = await getARoom(roomId);
+      if (!room) return res.status(404).json({ message: "Room not found" });
+
+      const publicRoomData = {
+        _id: room._id,
+        event_name: room.event_name,
+        event_type: room.event_type,
+        event_typeOther: room.event_typeOther,
+        event_description: room.event_description,
+        event_location_address: room.event_location_address,
+        event_location: room.event_location,
+        event_schedule: room.event_schedule,
+        event_privacy: room.event_privacy,
+        paid: room.paid,
+        created_user: room.created_user,
+        event_flyer_img: room.event_flyer_img,
+        event_media_img: room.event_media_img,
+        event_venue_image: room.event_venue_image,
+        specialGuest: room.specialGuest,
+        event_sponsors: room.event_sponsors,
+        stats: room.stats
+      };
+
+      res.status(200).json(publicRoomData);
     } catch (err: any) {
       Logging.error(err);
       next(new HttpException(404, err.message));
@@ -767,6 +924,127 @@ class RoomController implements Controller {
       if (!addedGuest) return res.status(400).send({ message: "Sponsor not added" });
 
       res.status(201).send(addedGuest);
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private getShareLinks = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      const { shareType = ShareType.ROOM_ACCESS, tierName, userId } = req.query;
+
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+
+      if (!roomId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid room ID format" });
+      }
+
+      const shareLinks = await generateShareLinks(
+        roomId,
+        shareType as ShareType,
+        userId as string,
+        tierName as string
+      );
+
+      res.status(200).json({
+        success: true,
+        roomId,
+        shareType,
+        shareLinks
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private trackShare = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      const { platform, shareType = ShareType.ROOM_ACCESS, tierName, userId } = req.body;
+
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+      if (!platform) return res.status(400).json({ message: "Platform is required" });
+
+      if (!roomId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid room ID format" });
+      }
+
+      const result = await trackShare(
+        roomId,
+        platform as SharePlatform,
+        shareType as ShareType,
+        userId
+      );
+
+      res.status(200).json({
+        success: true,
+        shareUrl: result.shareUrl,
+        originalUrl: result.originalUrl,
+        platform: result.platform
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private getShareAnalytics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+
+      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
+
+      if (!roomId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid room ID format" });
+      }
+
+      const analytics = await getRoomShareAnalytics(roomId);
+
+      res.status(200).json({
+        success: true,
+        roomId,
+        analytics
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private handleShareClick = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { platform, encodedUrl } = req.params;
+
+      if (!platform || !encodedUrl) {
+        return res.status(400).json({ message: "Platform and encoded URL are required" });
+      }
+
+      let originalUrl = Buffer.from(encodedUrl, 'base64').toString('utf-8');
+      
+      if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+        originalUrl = `http://${originalUrl}`;
+      }
+      
+      const shareUrl = `${req.protocol}://${req.get('host')}/rooms/share/${platform}/${encodedUrl}`;
+
+      await trackClick(shareUrl);
+
+      res.redirect(originalUrl);
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }

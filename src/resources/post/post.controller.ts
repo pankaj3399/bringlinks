@@ -14,6 +14,13 @@ import {
   unLikeAPost,
   updatePost,
 } from "./post.service";
+import {
+  generatePostShareLinks,
+  trackPostShare,
+  trackPostShareClick,
+  getPostShareAnalytics
+} from "./postShare.service";
+import { PostSharePlatform, PostShareType } from "./postShare.model";
 import validationMiddleware from "../../middleware/val.middleware";
 import validate from "./post.validation";
 import commentValidate from "../comments/comments.validation";
@@ -34,6 +41,24 @@ class PostController implements Controller {
     this.initializeRoutes();
   }
   private initializeRoutes(): void {
+    this.router.get(
+      `${this.path}/:postId/share-links`,
+      this.getPostShareLinks
+    );
+    this.router.post(
+      `${this.path}/:postId/share`,
+      this.trackPostShare
+    );
+    this.router.get(
+      `${this.path}/:postId/share-analytics`,
+      RequiredAuth,
+      this.getPostShareAnalytics
+    );
+    this.router.get(
+      `${this.path}/share/:platform/:encodedUrl`,
+      this.handlePostShareClick
+    );
+    
     this.router.post(
       `${this.path}/:userid`,
       RequiredAuth,
@@ -288,6 +313,127 @@ class PostController implements Controller {
     } catch (err: any) {
       Logging.error(err);
       new HttpException(500, err);
+    }
+  };
+
+  private getPostShareLinks = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { postId } = req.params;
+      const { shareType = PostShareType.POST_SHARE, userId } = req.query;
+
+      if (!postId) return res.status(400).json({ message: "Post ID is required" });
+
+      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid post ID format" });
+      }
+
+      const shareLinks = await generatePostShareLinks(
+        postId,
+        shareType as PostShareType,
+        userId as string
+      );
+
+      res.status(200).json({
+        success: true,
+        postId,
+        shareType,
+        shareLinks
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private trackPostShare = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { postId } = req.params;
+      const { platform, shareType = PostShareType.POST_SHARE, userId } = req.body;
+
+      if (!postId) return res.status(400).json({ message: "Post ID is required" });
+      if (!platform) return res.status(400).json({ message: "Platform is required" });
+      if (!userId) return res.status(400).json({ message: "User ID is required" });
+
+      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid post ID format" });
+      }
+
+      const result = await trackPostShare(
+        postId,
+        userId,
+        platform as PostSharePlatform,
+        shareType as PostShareType
+      );
+
+      res.status(200).json({
+        success: true,
+        shareUrl: result.shareUrl,
+        originalUrl: result.originalUrl,
+        platform: result.platform
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private getPostShareAnalytics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { postId } = req.params;
+
+      if (!postId) return res.status(400).json({ message: "Post ID is required" });
+
+      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+        return res.status(400).json({ message: "Invalid post ID format" });
+      }
+
+      const analytics = await getPostShareAnalytics(postId);
+
+      res.status(200).json({
+        success: true,
+        postId,
+        analytics
+      });
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
+    }
+  };
+
+  private handlePostShareClick = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { platform, encodedUrl } = req.params;
+
+      if (!platform || !encodedUrl) {
+        return res.status(400).json({ message: "Platform and encoded URL are required" });
+      }
+
+      let originalUrl = Buffer.from(encodedUrl, 'base64').toString('utf-8');
+      
+      if (!originalUrl.startsWith('http://') && !originalUrl.startsWith('https://')) {
+        originalUrl = `http://${originalUrl}`;
+      }
+      
+      const shareUrl = `${req.protocol}://${req.get('host')}/posts/share/${platform}/${encodedUrl}`;
+
+      await trackPostShareClick(shareUrl);
+
+      res.redirect(originalUrl);
+    } catch (err: any) {
+      next(new HttpException(400, err.message));
     }
   };
 }

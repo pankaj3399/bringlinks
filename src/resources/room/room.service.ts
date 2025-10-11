@@ -188,19 +188,7 @@ export const createRoomQRCode = async (roomId: string) => {
     const room = await Rooms.findById(roomId);
     if (!room) throw new Error("Room not found");
 
-    const roomQRData = {
-      _id: room._id,
-      roomName: room.event_name,
-      roomType: room.event_type ? room.event_type : room.event_typeOther,
-      roomLocation:
-        room.event_location_address.street_address +
-        ", " +
-        room.event_location_address.city,
-      paid: room.paid,
-    };
-
-    const roomInfo = JSON.stringify(roomQRData);
-    const roomUrl = `${validateEnv.FRONTEND_URL}/room/${roomInfo}`;
+    const roomUrl = `${validateEnv.FRONTEND_URL}/room/${roomId}`;
 
     const qrCode = await QRCode.toDataURL(roomUrl);
     if (!qrCode) throw new Error("QR code not created");
@@ -221,6 +209,41 @@ export const getQRCode = async (roomId: string) => {
     if (!room) throw new Error("Room not found");
 
     return room.roomQRCode;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
+const createPurchaseQRCode = async (roomId: string, tierName: string) => {
+  try {
+    const room = await Rooms.findById(roomId);
+    if (!room) throw new Error("Room not found");
+
+    const purchaseUrl = `${validateEnv.FRONTEND_URL}/purchase/${roomId}?tier=${encodeURIComponent(tierName)}`;
+
+    const qrCode = await QRCode.toDataURL(purchaseUrl);
+    if (!qrCode) throw new Error("Purchase QR code not created");
+
+    return qrCode;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
+const createEntryQRCode = async (roomId: string, userId: string, ticketId?: string) => {
+  try {
+    const room = await Rooms.findById(roomId);
+    if (!room) throw new Error("Room not found");
+
+    const generatedTicketId = ticketId || `ticket_${Date.now()}`;
+    const entryUrl = `${validateEnv.FRONTEND_URL}/entry/${roomId}?user=${userId}&ticket=${generatedTicketId}`;
+
+    const qrCode = await QRCode.toDataURL(entryUrl);
+    if (!qrCode) throw new Error("Entry QR code not created");
+
+    return qrCode;
   } catch (err: any) {
     Logging.error(err);
     throw err;
@@ -869,3 +892,5 @@ export {
   acceptRoomInvite,
   roomsNearBy,
 };
+
+export { createPurchaseQRCode, createEntryQRCode };
