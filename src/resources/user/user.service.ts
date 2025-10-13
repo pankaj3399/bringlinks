@@ -75,13 +75,17 @@ const registerUser = async (userData: any) => {
     };
 
     const allowedStates = parseAllowedStates();
-    if (!allowedStates.includes(state.trim().toLowerCase())) {
+    const isFromAllowedState = allowedStates.includes(state.trim().toLowerCase());
+    
+    if (!isFromAllowedState) {
       throw new Error("Service not available in your state");
     }
 
-    const isValidCode = await validateAndUseSignupCode(signupCode);
-    if (!isValidCode) {
-      throw new Error("Invalid signup code or code has reached maximum usage limit");
+    if (signupCode) {
+      const isValidCode = await validateAndUseSignupCode(signupCode);
+      if (!isValidCode) {
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
+      }
     }
 
     const foundUser: IUserDocument = await User.findByUsername(auth.username);

@@ -442,6 +442,7 @@ class RoomController implements Controller {
         event_venue_image: room.event_venue_image,
         specialGuest: room.specialGuest,
         event_sponsors: room.event_sponsors,
+        shares: room.shares,
         stats: room.stats
       };
 
@@ -987,8 +988,8 @@ class RoomController implements Controller {
 
       res.status(200).json({
         success: true,
+        shareId: result.shareId,
         shareUrl: result.shareUrl,
-        originalUrl: result.originalUrl,
         platform: result.platform
       });
     } catch (err: any) {

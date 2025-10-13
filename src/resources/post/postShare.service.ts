@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import PostShare, { IPostShare, PostSharePlatform, PostShareType } from "./postShare.model";
+import Posts from "./post.model";
 import { validateEnv } from "../../../config/validateEnv";
 import Logging from "../../library/logging";
 
@@ -51,13 +52,16 @@ export const trackPostShare = async (
     let share = await PostShare.findOne({ shareUrl });
     
     if (!share) {
-      share = await PostShare.create({
+      share =  await PostShare.create({
         postId: new mongoose.Types.ObjectId(postId),
         userId: new mongoose.Types.ObjectId(userId),
         platform,
         shareType,
-        shareUrl,
-        originalUrl
+        shareUrl
+      });
+
+      await Posts.findByIdAndUpdate(postId, {
+        $push: { shares: share._id }
       });
     }
 
@@ -66,8 +70,8 @@ export const trackPostShare = async (
     });
 
     return {
+      shareId: share._id,
       shareUrl: share.shareUrl,
-      originalUrl: share.originalUrl,
       platform: share.platform
     };
   } catch (error: any) {
@@ -96,6 +100,16 @@ export const trackPostShareClick = async (shareUrl: string) => {
 
 export const getPostShareAnalytics = async (postId: string) => {
   try {
+    const Posts = (await import("./post.model")).default;
+    const post = await Posts.findById(postId).populate({
+      path: "shares",
+      select: "platform shareType shareUrl analytics createdAt"
+    });
+
+    if (!post) {
+      throw new Error("Post not found");
+    }
+
     const analytics = await PostShare.aggregate([
       { $match: { postId: new mongoose.Types.ObjectId(postId) } },
       {
@@ -138,9 +152,12 @@ export const getPostShareAnalytics = async (postId: string) => {
       }
     ]);
 
-    return analytics[0] || {
-      totalStats: { totalShares: 0, totalClicks: 0, totalConversions: 0 },
-      platformBreakdown: []
+    return {
+      ...analytics[0] || {
+        totalStats: { totalShares: 0, totalClicks: 0, totalConversions: 0 },
+        platformBreakdown: []
+      },
+      shares: post.shares || []
     };
   } catch (error: any) {
     Logging.error(`Error getting post share analytics: ${error.message}`);

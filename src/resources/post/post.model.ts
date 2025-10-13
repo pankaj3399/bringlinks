@@ -53,6 +53,13 @@ const PostSchema = new Schema<IPostDocument>(
         ref: "Comments",
       },
     ],
+    // shares of post
+    shares: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "PostShare",
+      },
+    ],
     // user sending post
     user_Id: {
       type: mongoose.Schema.Types.ObjectId,

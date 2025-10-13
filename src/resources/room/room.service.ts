@@ -25,7 +25,14 @@ const getARoom = async (id: string) => {
     const foundedRoom = await Rooms.findById(_id);
 
     if (!foundedRoom) throw new Error("Room not found");
-    return foundedRoom.populate({ path: "created_user", model: "User" });
+    return foundedRoom.populate([
+      { path: "created_user", model: "User" },
+      { 
+        path: "shares", 
+        model: "Share",
+        select: "platform shareType shareUrl analytics createdAt"
+      }
+    ]);
   } catch (err: any) {
     Logging.error(err);
     throw err;
@@ -77,10 +84,14 @@ const getRoomBy = async (room: IRoomsDocument, path: string) => {
 
 const getAllRooms = async () => {
   try {
-    const allRooms = await Rooms.find().populate({
-      path: "created_user",
-      model: "User",
-    });
+    const allRooms = await Rooms.find().populate([
+      { path: "created_user", model: "User" },
+      { 
+        path: "shares", 
+        model: "Share",
+        select: "platform shareType shareUrl analytics createdAt"
+      }
+    ]);
 
     if (!allRooms) throw new Error("Room not found");
 

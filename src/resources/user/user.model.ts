@@ -245,7 +245,6 @@ UserSchema.index({
   "profile.username": 1,
 });
 UserSchema.index({ role: 1 });
-UserSchema.index({ "profile.location.currentLocation": 1 });
 UserSchema.index({ enteredRooms: 1 });
 UserSchema.index({ followers: 1 });
 UserSchema.index({ following: 1 });

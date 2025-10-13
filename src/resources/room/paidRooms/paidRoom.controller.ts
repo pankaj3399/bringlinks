@@ -21,6 +21,10 @@ import {
 } from "../../../middleware/auth.middleware";
 import jwt from "../../../utils/authentication/jwt.createtoken";
 import { canCreatePaidRooms } from "../../user/creator/creator.service";
+import Rooms from "../room.model";
+import Creator from "../../user/creator/creator.model";
+import StripeService from "../../../utils/stripe/stripe.service";
+import { createRoomQRCode } from "../room.service";
 
 class PaidRoomController implements Controller {
   public path = "/purchase";
@@ -125,7 +129,6 @@ class PaidRoomController implements Controller {
         return res.status(400).json({ message: "tierName is required"});
       }
 
-      const { default: Rooms } = await import("../room.model");
       const roomDoc = await Rooms.findById(roomId).select("created_user");
       if (!roomDoc) return res.status(404).json({ message: "Room not found" });
       const creatorUserId = String((roomDoc as any).created_user);
@@ -157,13 +160,12 @@ class PaidRoomController implements Controller {
       } as Record<string, string>;
 
       
-      const { default: Creator } = await import("../../user/creator/creator.model");
       const creator = await Creator.findOne({ userId: creatorUserId });
       if (!creator || !creator.stripeConnectAccountId) {
         return res.status(403).json({ message: "Stripe Connect account required" });
       }
 
-      const session = await (await import("../../../utils/stripe/stripe.service")).default.createCheckoutSession({
+      const session = await StripeService.createCheckoutSession({
         amount: ticketAmount,
         currency: "usd",
         connectedAccountId: creator.stripeConnectAccountId,
@@ -187,12 +189,11 @@ class PaidRoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
-      const { default: Creator } = await import("../../user/creator/creator.model");
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
         return res.status(404).json({ message: "Creator Stripe account not found" });
       }
-      const loginLink = await (await import("../../../utils/stripe/stripe.service")).default.createLoginLink(creator.stripeConnectAccountId);
+      const loginLink = await StripeService.createLoginLink(creator.stripeConnectAccountId);
       return res.status(200).json({ success: true, url: loginLink.url });
     } catch (err: any) {
       return next(new HttpException(400, err.message));
@@ -207,14 +208,12 @@ class PaidRoomController implements Controller {
     try {
       const userId = req.user?._id;
       let { amountCents } = req.body as { amountCents?: number };
-      const { default: Creator } = await import("../../user/creator/creator.model");
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
         return res.status(404).json({ message: "Creator Stripe account not found" });
       }
-      const StripeSvc = (await import("../../../utils/stripe/stripe.service")).default;
 
-      const balance = await StripeSvc.getAccountBalance(creator.stripeConnectAccountId);
+      const balance = await StripeService.getAccountBalance(creator.stripeConnectAccountId);
       const availableUsd= (balance.available ||[]).filter((b: any) => b.currency?.toLowerCase() ==="usd");
       const availableCents= availableUsd.reduce((sum: number, b: any) => sum +(Number(b.amount) || 0),0);
 
@@ -230,7 +229,7 @@ class PaidRoomController implements Controller {
         return res.status(400).json({ message: "Payout amount exceeds available balance", availableCents });
       }
 
-      const payout = await StripeSvc.createPayout(creator.stripeConnectAccountId, amountCents, "usd");
+      const payout = await StripeService.createPayout(creator.stripeConnectAccountId, amountCents, "usd");
       return res.status(200).json({ success: true, payout });
     } catch (err: any) {
       return next(new HttpException(400, err.message));
@@ -244,13 +243,11 @@ class PaidRoomController implements Controller {
   ): Promise<Response |void> =>{
     try {
       const userId = req.user?._id;
-      const { default: Creator } = await import("../../user/creator/creator.model");
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
         return res.status(404).json({ message: "Creator Stripe account not found" });
       }
-      const StripeSvc = (await import("../../../utils/stripe/stripe.service")).default;
-      const balance = await StripeSvc.getAccountBalance(creator.stripeConnectAccountId);
+      const balance = await StripeService.getAccountBalance(creator.stripeConnectAccountId);
       return res.status(200).json({ success: true, balance });
     } catch (err: any){
       return next(new HttpException(400, err.message));
@@ -317,7 +314,6 @@ class PaidRoomController implements Controller {
         return res.status(400).json({ message: "Paid room not created" });
       }
 
-      const { createRoomQRCode } = await import("../room.service");
       const qrCode = await createRoomQRCode(createdPaidRoom.room._id);
 
       res.status(201).json({

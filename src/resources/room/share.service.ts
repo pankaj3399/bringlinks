@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Share, { IShare, SharePlatform, ShareType } from "./share.model";
+import Rooms from "./room.model";
 import { validateEnv } from "../../../config/validateEnv";
 import Logging from "../../library/logging";
 
@@ -56,13 +57,16 @@ export const trackShare = async (
     let share = await Share.findOne({ shareUrl });
     
     if (!share) {
-      share = await Share.create({
+      share =       await Share.create({
         roomId: new mongoose.Types.ObjectId(roomId),
         userId: userId ? new mongoose.Types.ObjectId(userId) : undefined,
         platform,
         shareType,
-        shareUrl,
-        originalUrl
+        shareUrl
+      });
+
+      await Rooms.findByIdAndUpdate(roomId, {
+        $push: { shares: share._id }
       });
     }
 
@@ -71,8 +75,8 @@ export const trackShare = async (
     });
 
     return {
+      shareId: share._id,
       shareUrl: share.shareUrl,
-      originalUrl: share.originalUrl,
       platform: share.platform
     };
   } catch (error: any) {
@@ -119,6 +123,16 @@ export const trackConversion = async (shareUrl: string) => {
 
 export const getRoomShareAnalytics = async (roomId: string) => {
   try {
+    const Rooms = (await import("./room.model")).default;
+    const room = await Rooms.findById(roomId).populate({
+      path: "shares",
+      select: "platform shareType shareUrl analytics createdAt"
+    });
+
+    if (!room) {
+      throw new Error("Room not found");
+    }
+
     const analytics = await Share.aggregate([
       { $match: { roomId: new mongoose.Types.ObjectId(roomId) } },
       {
@@ -155,7 +169,8 @@ export const getRoomShareAnalytics = async (roomId: string) => {
 
     return {
       platformBreakdown: analytics,
-      totalStats: totalStats[0] || { totalShares: 0, totalClicks: 0, totalConversions: 0 }
+      totalStats: totalStats[0] || { totalShares: 0, totalClicks: 0, totalConversions: 0 },
+      shares: room.shares || []
     };
   } catch (error: any) {
     Logging.error(`Error getting room analytics: ${error.message}`);

@@ -6,7 +6,6 @@ export interface IPostShare extends Document {
   platform: PostSharePlatform;
   shareType: PostShareType;
   shareUrl: string;
-  originalUrl: string;
   analytics: {
     clicks: number;
     shares: number;
@@ -58,10 +57,6 @@ const PostShareSchema = new Schema<IPostShare>(
       type: String,
       required: true,
       unique: true
-    },
-    originalUrl: {
-      type: String,
-      required: true
     },
     analytics: {
       clicks: {

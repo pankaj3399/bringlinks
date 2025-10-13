@@ -6,7 +6,6 @@ export interface IShare extends Document {
   platform: SharePlatform;
   shareType: ShareType;
   shareUrl: string;
-  originalUrl: string;
   analytics: {
     clicks: number;
     shares: number;
@@ -59,10 +58,6 @@ const ShareSchema = new Schema<IShare>(
       type: String,
       required: true,
       unique: true
-    },
-    originalUrl: {
-      type: String,
-      required: true
     },
     analytics: {
       clicks: {

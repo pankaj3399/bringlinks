@@ -3,7 +3,7 @@ import { ICreatorRegistrationRequest, ICreatorSignupRequest } from "./creator.in
 
 export const creatorRegistration = Joi.object<ICreatorRegistrationRequest>().keys({
   userId: Joi.string().required(),
-  signupCode: Joi.string().required(),
+  signupCode: Joi.string().optional(),
   portfolio: Joi.string().uri().optional(),
   socialMedia: Joi.array().items(Joi.string().uri()).optional(),
   experience: Joi.string().min(2).max(500).optional(),
@@ -15,7 +15,7 @@ export const creatorSignup = Joi.object<ICreatorSignupRequest>().keys({
   firstName: Joi.string().min(2).max(50).required(),
   lastName: Joi.string().min(2).max(50).required(),
   state: Joi.string().min(2).max(50).required(),
-  signupCode: Joi.string().required(),
+  signupCode: Joi.string().optional(),
   portfolio: Joi.string().uri().optional(),
   socialMedia: Joi.array().items(Joi.string().uri()).optional(),
   experience: Joi.string().min(2).max(500).optional(),

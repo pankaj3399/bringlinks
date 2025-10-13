@@ -17,6 +17,7 @@ export interface IRooms extends Document {
   entered_id: mongoose.Types.ObjectId[];
   posts: mongoose.Types.ObjectId[];
   chats: mongoose.Types.ObjectId[];
+  shares: mongoose.Types.ObjectId[];
   event_location_address: Address;
   event_location: CurrentLo;
   event_venue_image: IMGNames[];

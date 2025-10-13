@@ -52,6 +52,11 @@ const creatorSchema = new Schema<ICreatorDocument>(
   { timestamps: true }
 );
 
+creatorSchema.index({ userId: 1 });
+creatorSchema.index({ stripeConnectAccountId: 1 });
+creatorSchema.index({ stripeAccountStatus: 1 });
+creatorSchema.index({ createdAt: -1 });
+
 creatorSchema.statics.findCreatorById = function (_id: string) {
   return this.findById(_id).populate("userId");
 };

@@ -374,8 +374,8 @@ class PostController implements Controller {
 
       res.status(200).json({
         success: true,
+        shareId: result.shareId,
         shareUrl: result.shareUrl,
-        originalUrl: result.originalUrl,
         platform: result.platform
       });
     } catch (err: any) {

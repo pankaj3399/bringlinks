@@ -14,12 +14,19 @@ const getAPostById = async (_id: string, user_id: string) => {
 
     if (!foundedPost) throw new Error("Post not found");
 
-    return foundedPost.populate({
-      path: "user_Id",
-      model: "User",
-      select:
-        " -auth.username -auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
-    });
+    return foundedPost.populate([
+      {
+        path: "user_Id",
+        model: "User",
+        select:
+          " -auth.username -auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
+      },
+      {
+        path: "shares",
+        model: "PostShare",
+        select: "platform shareType shareUrl analytics createdAt"
+      }
+    ]);
   } catch (err: any) {
     Logging.error(err);
   }

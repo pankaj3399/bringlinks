@@ -10,6 +10,7 @@ export interface IPost extends Document {
   room_Id?: mongoose.Types.ObjectId;
   likes: mongoose.Types.ObjectId[];
   comments: mongoose.Types.ObjectId[];
+  shares: mongoose.Types.ObjectId[];
   stats: StatsType;
   postedLocation: Pick<CurrentLo, "type" | "coordinates">;
 }

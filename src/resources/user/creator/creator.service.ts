@@ -27,13 +27,17 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
     };
 
     const allowedStates = parseAllowedStates();
-    if (!allowedStates.includes(state.trim().toLowerCase())) {
+    const isFromAllowedState = allowedStates.includes(state.trim().toLowerCase());
+    
+    if (!isFromAllowedState) {
       throw new Error("Creator registration not available in your state");
     }
 
-    const codeConsumed = await validateAndUseSignupCode(signupCode);
-    if (!codeConsumed) {
-      throw new Error("Invalid signup code or code has reached maximum usage limit");
+    if (signupCode) {
+      const codeConsumed = await validateAndUseSignupCode(signupCode);
+      if (!codeConsumed) {
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
+      }
     }
 
     const saltRounds = 10;
@@ -124,13 +128,17 @@ export const registerCreator = async (creatorData: ICreatorRegistrationRequest) 
     };
 
     const allowedStates = parseAllowedStates();
-    if (user.state && !allowedStates.includes(user.state.trim().toLowerCase())) {
+    const isFromAllowedState = user.state && allowedStates.includes(user.state.trim().toLowerCase());
+    
+    if (!isFromAllowedState) {
       throw new Error("Creator registration not available in your state");
     }
 
-    const codeConsumed = await validateAndUseSignupCode(signupCode);
-    if (!codeConsumed) {
-      throw new Error("Invalid signup code or code has reached maximum usage limit");
+    if (signupCode) {
+      const codeConsumed = await validateAndUseSignupCode(signupCode);
+      if (!codeConsumed) {
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
+      }
     }
 
     const existingCreator = await Creator.findOne({ userId });
@@ -163,9 +171,10 @@ export const registerCreator = async (creatorData: ICreatorRegistrationRequest) 
 
 export const canCreatePaidRooms = async (userId: string) => {
   try {
-    if ((validateEnv.FORCE_CREATOR_ELIGIBLE || "").toString().toLowerCase() === "true") {
-      return { canCreate: true };
-    }
+    //uncomment follwing if you want to allow creator to create paid room without creating stripe connect account
+    // if ((validateEnv.FORCE_CREATOR_ELIGIBLE || "").toString().toLowerCase() === "true") {
+    //   return { canCreate: true };
+    // }
 
     const creator = await Creator.findOne({ userId });
     

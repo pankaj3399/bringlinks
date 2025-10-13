@@ -5,6 +5,7 @@ import Creator from "./creator.model";
 import Logging from "../../../library/logging";
 import { StripeAccountStatus } from "./creator.interface";
 import PaidRoom from "../../room/paidRooms/paidRoom.model";
+import { createEntryQRCode } from "../../room/room.service";
 
 const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
 if (!stripeApiKey) {
@@ -146,7 +147,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     await paidRoom.save();
 
     try {
-      const { createEntryQRCode } = await import("../../room/room.service");
       const ticketId = `ticket_${session.id}_${Date.now()}`;
       const entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
       

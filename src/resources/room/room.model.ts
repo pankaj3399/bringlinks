@@ -215,6 +215,12 @@ const RoomSchema = new Schema<IRoomsDocument>(
         ref: "Chats",
       },
     ],
+    shares: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: "Share",
+      },
+    ],
     itinerary: [
       {
         type: Schema.Types.ObjectId,
