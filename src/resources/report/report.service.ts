@@ -17,26 +17,25 @@ export const getReport = async (reportId: string) => {
 };
 
 export const updateReport = async (
-  report: Pick<
-    IReport,
-    | "_id"
-    | "userId"
-    | "reportType"
-    | "description"
-    | "evidence"
-    | "reportedTicketId"
-    | "reportedRoomId"
-    | "reportedUserId"
+  reportId: string,
+  updates: Partial<
+    Pick<
+      IReport,
+      | "userId"
+      | "reportType"
+      | "description"
+      | "evidence"
+      | "reportedTicketId"
+      | "reportedRoomId"
+      | "reportedUserId"
+    >
   >
 ) => {
   try {
     const updatedReport = await Report.findByIdAndUpdate(
-      { _id: report._id },
-      {
-        $set: {
-          report,
-        },
-      }
+      { _id: reportId },
+      { $set: updates },
+      { new: true }
     ).catch((err) => {
       throw err;
     });

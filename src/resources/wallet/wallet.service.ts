@@ -35,18 +35,19 @@ export const createWallet = async (
     ).populate({ path: "wallet", model: "Wallet" });
 
     if (!updatedUser) throw new Error("Wallet is not updated");
-    return updatedUser;
+    return createdWallet;
   } catch (err: any) {
     Logging.error(err);
     throw err;
   }
 };
 
-export const updateWallet = async (wallet: IWalletDocument) => {
+export const updateWallet = async (walletId: string, updates: Partial<IWalletDocument>) => {
   try {
     const foundedWallet = await Wallet.findByIdAndUpdate(
-      { _id: wallet._id },
-      wallet
+      { _id: walletId },
+      updates,
+      { new: true }
     );
 
     if (!foundedWallet) throw new Error("Wallet is not updated");

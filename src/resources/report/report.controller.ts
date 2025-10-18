@@ -67,7 +67,7 @@ class ReportController implements Controller {
       const { reportId } = req.params;
       if (!reportId) return res.status(400).send("Report Id is required");
 
-      const updatedReport = await updateReport(req.body);
+      const updatedReport = await updateReport(reportId, req.body);
       if (!updatedReport) return res.status(400).send("Report not updated");
 
       res.status(201).send(updatedReport);

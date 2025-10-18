@@ -44,36 +44,37 @@ export const buyTickets = async (
 
     if (!foundRoom || !foundRoom.paid) throw new Error("Room not found");
 
+    const selectedTier = paidRoom?.tickets?.pricing?.[0]?.tiers as any;
+    if (!selectedTier) {
+      throw new Error("Tier is required");
+    }
+
     const paid_Room = await PaidRoom.updateOne(
       { roomId: room_Id },
       {
         $addToSet: {
           paidUsers: paidRoom.paidUsers,
           receiptId,
-          tickets: {
-            pricing: {
-              $eq: {
-                tiers: paidRoom.tickets.pricing[0].tiers,
-                $inc: {
-                  sold: 1,
-                  available: -1,
-                },
-              },
-            },
-          },
+        },
+        $inc: {
+          "tickets.totalSold": 1,
+          "tickets.totalTicketsAvailable": -1,
+          "tickets.pricing.$[elem].sold": 1,
+          "tickets.pricing.$[elem].available": -1,
         },
         $set: {
-          tickets: {
-            $inc: {
-              totalSold: 1,
-              totalTicketsAvailable: -1,
-            },
-            totalRevenue: paidRoom.tickets.pricing.reduce(
-              (acc, curr) => acc + curr.price * curr.sold,
-              0
-            ),
-          },
+          "tickets.totalRevenue": Array.isArray(paidRoom?.tickets?.pricing)
+            ? paidRoom.tickets.pricing.reduce((acc: number, curr: any) => {
+                const price = Number(curr?.price ?? 0);
+                const sold = Number(curr?.sold ?? 0);
+                if (!Number.isFinite(price) || !Number.isFinite(sold)) return acc;
+                return acc + price * sold;
+              }, 0)
+            : 0,
         },
+      },
+      {
+        arrayFilters: [{ "elem.tiers": selectedTier }],
       }
     );
 
@@ -244,7 +245,7 @@ export const createNewPaidRoom = async (
     maxTickets: number;
     ticketTiers?: Array<{
       name: string;
-      price: number;
+      price: number;  
       quantity: number;
     }>;
     event_type?: string;
@@ -260,7 +261,7 @@ export const createNewPaidRoom = async (
     };
     event_location?: {
       type?: string;
-      coordinates?: number[]; 
+      coordinates?: number[];
       venue?: string;
     };
     event_description?: string;
@@ -318,7 +319,15 @@ export const createNewPaidRoom = async (
       created_user: new mongoose.Types.ObjectId(userId),
     });
 
+    Logging.info(`Created room with paid: ${newRoom.paid}`);
+
     if (!newRoom) throw new Error("Room not created");
+
+    if (!newRoom.paid) {
+      await Rooms.findByIdAndUpdate(newRoom._id, { paid: true });
+      newRoom.paid = true;
+      Logging.info(`Updated room ${newRoom._id} to paid: true`);
+    }
 
     const mapTierNameToEnum = (name: string): string => {
       const normalized = (name || "").toLowerCase();

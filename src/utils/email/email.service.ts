@@ -73,11 +73,12 @@ class EmailService {
     let link: string;
     Logging.log(email);
     Logging.log(refreshToken);
-    const adminEmail = validateEnv.ADMIN_NOTIFICATION_EMAIL as
+
+    const adminEmail = (validateEnv as any).ADMIN_NOTIFICATION_EMAIL as
       | string
       | undefined;
     const fromEmail =
-      (validateEnv.EMAIL_FROM as string | undefined) || (adminEmail as string);
+      ((validateEnv as any).EMAIL_FROM as string | undefined) || (adminEmail as string);
 
     if (!email || email.trim().length === 0 || !refreshToken) {
       throw new Error("Missing Email or Refresh Token");

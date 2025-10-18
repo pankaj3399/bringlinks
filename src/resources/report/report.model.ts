@@ -36,15 +36,7 @@ const reportSchema = new mongoose.Schema<IReport>({
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
   },
-  createdAt: {
-    type: Date,
-    required: true,
-  },
-  updatedAt: {
-    type: Date,
-    required: true,
-  },
-});
+}, { timestamps: true });
 
 const Report = mongoose.model<IReport>("Report", reportSchema);
 export default Report;

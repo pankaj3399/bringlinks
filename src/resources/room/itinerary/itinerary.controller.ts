@@ -10,6 +10,7 @@ import {
   createItinerary,
   deleteItinerary,
   getItineraryById,
+  getItineraryByRoomId,
   updateItinerary,
 } from "./itinerary.service";
 import mongoose from "mongoose";
@@ -63,10 +64,7 @@ class ItineraryController implements Controller {
       const { userId, roomId } = req.params;
       if (!userId || !roomId) throw new Error("Id is required");
 
-      const _id = roomId as string;
-      const roomRef = { _id } as Pick<IRoomsDocument, "_id">;
-
-      const createdItinerary = await createItinerary(req.body, roomRef);
+      const createdItinerary = await createItinerary(req.body as any, roomId as any);
       if (!createdItinerary) throw new Error("Itinerary not created");
 
       Logging.info(createdItinerary);
@@ -83,13 +81,13 @@ class ItineraryController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
-      const foundItinerary = await getItineraryById(roomId);
-      if (!foundItinerary) res.status(400).send("Itinerary not found");
+      const foundItinerary = await getItineraryByRoomId(roomId);
+      if (!foundItinerary) return res.status(400).send("Itinerary not found");
 
       Logging.info(foundItinerary);
-      res.status(200).json(foundItinerary);
+      return res.status(200).json(foundItinerary);
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }
@@ -101,13 +99,17 @@ class ItineraryController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId, roomId } = req.params;
-      if (!userId || !roomId) res.status(400).send("Id is required");
+      const { _id } = req.body as any;
 
-      const updatedItineraryById = await updateItinerary(roomId, req.body);
-      if (!updatedItineraryById) res.status(400).send(updatedItineraryById);
+      if (!userId || !roomId) return res.status(400).send("Id is required");
+      if (!_id) return res.status(400).send("Itinerary _id is required");
+
+      const updatedItineraryById = await updateItinerary(_id, req.body);
+      if (!updatedItineraryById)
+        return res.status(400).send("Itinerary not updated");
 
       Logging.info(updatedItineraryById);
-      res.status(201).json(updatedItineraryById);
+      return res.status(200).json(updatedItineraryById);
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }
@@ -122,7 +124,7 @@ class ItineraryController implements Controller {
       const { itineraryId } = req.query;
 
       if (!userId || !roomId || !itineraryId)
-        res.status(400).send("Id is required");
+        return res.status(400).send("Id is required");
 
       const deletedItinerary = await deleteItinerary(
         itineraryId as string,
@@ -130,9 +132,9 @@ class ItineraryController implements Controller {
       );
       Logging.info(deletedItinerary);
 
-      if (!deletedItinerary) res.status(400).send("Itinerary not deleted");
+      if (!deletedItinerary) return res.status(400).send("Itinerary not deleted");
 
-      res.status(200).json(deletedItinerary);
+      return res.status(200).json(deletedItinerary);
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }

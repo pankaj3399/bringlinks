@@ -270,9 +270,14 @@ export const roomAdminPermissions = async (
     const user_Id = userId as string;
     const room_Id = roomId as string;
 
+    const userObjectId = new mongoose.Types.ObjectId(user_Id);
+
     const foundRoom = await Rooms.findOne({
       _id: room_Id,
-      event_admin: user_Id,
+      $or: [
+        { event_admin: user_Id },
+        { event_admin: userObjectId },
+      ],
     }).clone();
 
     if (!foundRoom)

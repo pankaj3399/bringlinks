@@ -110,7 +110,7 @@ class RoomController implements Controller {
     );
     this.router.get(`${this.path}/allrooms`, RequiredAuth, this.getAllRooms);
     this.router.get(
-      `${this.path}/allroomspaginated/`,
+      `${this.path}/allroomspaginated`,
       RequiredAuth,
       this.getAllRoomsPaginated
     );
@@ -206,15 +206,12 @@ class RoomController implements Controller {
     this.router.get(
       `${this.path}/getqrcode/:roomId`,
       RequiredAuth,
-      isUserAccount,
-      isInvitedPermissions,
       isRoomPrivate,
       this.getRoomQRCode
     );
     this.router.get(
       `${this.path}/purchase-qr/:roomId`,
       RequiredAuth,
-      isUserAccount,
       this.getPurchaseQRCode
     );
     this.router.get(
@@ -224,7 +221,6 @@ class RoomController implements Controller {
     this.router.get(
       `${this.path}/entry-qr/:roomId/:userId`,
       RequiredAuth,
-      isUserAccount,
       this.getEntryQRCode
     );
     this.router.get(
@@ -311,9 +307,9 @@ class RoomController implements Controller {
       if (!roomId) res.status(400).send("Id is needed");
 
       const qrCode = await getQRCode(roomId);
-      if (!qrCode) res.status(400).send("QR code not found");
+      if (!qrCode) return res.status(400).json({ message: "QR code not found" });
 
-      res.status(200).send(qrCode);
+      res.status(200).json({ qrCode, type: "room" });
     } catch (err: any) {
       next(new HttpException(400, err));
     }
@@ -394,17 +390,36 @@ class RoomController implements Controller {
     try {
       const { roomId } = req.query;
 
-      if (!roomId) res.status(400).send("Id is needed");
+      if (!roomId) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Room ID is required" 
+        });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(roomId as string)) {
+        return res.status(400).json({ 
+          success: false, 
+          message: "Invalid room ID format" 
+        });
+      }
 
       const room = await getARoom(roomId as string);
 
-      if (!room) res.status(400).send("Room not found");
+      return res.status(200).json({
+        success: true,
+        room
+      });
 
-      Logging.info(room);
-      res.status(200).json(room);
     } catch (err: any) {
-      Logging.error(err);
-      next(new HttpException(404, err.message));
+      Logging.error(`Error getting room: ${err.message}`);
+      if (err.message.includes("not found")) {
+        return res.status(404).json({
+          success: false,
+          message: err.message
+        });
+      }
+      next(new HttpException(500, err.message));
     }
   };
 
@@ -629,11 +644,10 @@ class RoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { roomId } = req.params;
-      const { inviteeId } = req.query;
-      if (!inviteeId || !roomId) return res.status(400).send("Id is required");
+      const { roomId, userId } = req.params;
+      if (!userId || !roomId) return res.status(400).send("Id is required");
 
-      const room = await inviteAUser(roomId, inviteeId as string);
+      const room = await inviteAUser(roomId, userId as string);
 
       if (!room) return res.status(400).send("Room invite not sent");
       res.status(200).send(room);
@@ -704,9 +718,15 @@ class RoomController implements Controller {
       const { userId } = req.params;
       const { lng, ltd } = req.query;
       if (!userId) return res.status(400).send("User Id is required");
-      if (!lng && !ltd) return res.status(400).send("Location is needed");
+      if (lng == null || ltd == null) return res.status(400).send("Location is needed");
 
-      const nearByRooms = await roomsNearBy(userId, Number(lng), Number(ltd));
+      const lngNum = Number(String(lng).replace(/\s+/g, ""));
+      const ltdNum = Number(String(ltd).replace(/\s+/g, ""));
+      if (!Number.isFinite(lngNum) || !Number.isFinite(ltdNum)) {
+        return res.status(400).send("Invalid location coordinates");
+      }
+
+      const nearByRooms = await roomsNearBy(userId, lngNum, ltdNum);
       if (!nearByRooms) return res.status(200).send(`rooms couldn't be found`);
 
       Logging.info(nearByRooms);
@@ -747,7 +767,7 @@ class RoomController implements Controller {
       const { userId } = req.params;
       const { lng, ltd, page, limit } = req.query;
       if (!userId) return res.status(400).send("User Id is required");
-      if (!lng && !ltd) return res.status(400).send("Location is needed");
+      if (lng == null || ltd == null) return res.status(400).send("Location is needed");
       if (!page) return res.status(400).send("Page is needed");
       if (!limit) return res.status(400).send("Limit is needed");
 
@@ -756,10 +776,16 @@ class RoomController implements Controller {
       // Calculate the number of documents to skip
       const skip = (pageNum - 1) * limitNum;
 
+      const lngNum = Number(String(lng).replace(/\s+/g, ""));
+      const ltdNum = Number(String(ltd).replace(/\s+/g, ""));
+      if (!Number.isFinite(lngNum) || !Number.isFinite(ltdNum)) {
+        return res.status(400).send("Invalid location coordinates");
+      }
+
       const nearByRooms = await roomsNearByPaginated(
         userId,
-        Number(lng),
-        Number(ltd),
+        lngNum,
+        ltdNum,
         skip,
         limitNum
       );

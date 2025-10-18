@@ -22,9 +22,25 @@ export const getItineraryById = async (_id: string) => {
   }
 };
 
+export const getItineraryByRoomId = async (roomId: string) => {
+  try {
+    const foundedItinerary = await Itinerary.findOne({ roomId });
+
+    if (!foundedItinerary) throw new Error("Itinerary not found");
+    return foundedItinerary.populate({
+      path: "roomId",
+      model: "Rooms",
+      select:
+        "event_name event_type event_typeOther event_location_address event_location event_schedule event_venue_image event_description event_flyer_img",
+    });
+  } catch (err: any) {
+    throw err;
+  }
+};
+
 export const createItinerary = async (
   itinerary: ItineraryDocument,
-  _id: Pick<IRoomsDocument, "_id">
+  roomId: string
 ) => {
   try {
     const createdItinerary = await Itinerary.create(itinerary);
@@ -32,7 +48,7 @@ export const createItinerary = async (
     if (!createdItinerary) throw new Error("Itinerary is not created");
 
     const updatedRoom = await Rooms.findByIdAndUpdate(
-      { _id },
+      { _id: roomId },
       {
         $addToSet: { itinerary: createdItinerary._id },
       }
@@ -58,7 +74,8 @@ export const updateItinerary = async (
   try {
     const foundedItinerary = await Itinerary.findByIdAndUpdate(
       { _id },
-      itinerary
+      itinerary,
+      { new: true, runValidators: true }
     );
     if (!foundedItinerary) throw new Error("Itinerary not updated");
 
@@ -82,11 +99,11 @@ export const deleteItinerary = async (_id: string, room_Id: string) => {
 
     if (!foundRoomInItinerary) throw new Error("Itinerary not found");
 
-    const deletedItinerary = await Itinerary.deleteOne({ _id: _id });
+    const deletedItinerary = await Itinerary.deleteOne({ _id: itineraryId });
 
-    if (!deletedItinerary) throw new Error("Itinerary not deleted");
+    if (deletedItinerary.deletedCount === 0) throw new Error("Itinerary not deleted");
 
-    return foundRoomInItinerary;
+    return { success: true, deletedCount: deletedItinerary.deletedCount };
   } catch (err: any) {
     throw err;
   }

@@ -42,6 +42,13 @@ class ChatController implements Controller {
   private initializeRoutes(): void {
     this.router.get(`${this.path}/history/:chatType/:targetId`, RequiredAuth, this.getChatHistoryWithMedia);
 
+    this.router.post(`${this.path}/group`, RequiredAuth, this.createGroup);
+    this.router.get(`${this.path}/group/:groupId`, RequiredAuth, this.getGroup);
+    this.router.get(`${this.path}/groups/user/:userId`, RequiredAuth, this.getUserGroups);
+    this.router.put(`${this.path}/group/:groupId`, RequiredAuth, this.updateGroup);
+    this.router.post(`${this.path}/group/:groupId/member`, RequiredAuth, this.addMember);
+    this.router.delete(`${this.path}/group/:groupId/member/:userId`, RequiredAuth, this.removeMember);
+
     this.router.get(
       `${this.path}/:chatid/:userId/:chatType`,
       RequiredAuth,
@@ -54,13 +61,6 @@ class ChatController implements Controller {
     this.router.delete(`${this.path}/message/:messageId`, RequiredAuth, this.deleteMessage);
     
     this.router.post(`${this.path}/upload-media`, RequiredAuth, this.uploadMedia);
-    
-    this.router.post(`${this.path}/group`, RequiredAuth, this.createGroup);
-    this.router.get(`${this.path}/group/:groupId`, RequiredAuth, this.getGroup);
-    this.router.get(`${this.path}/groups/user/:userId`, RequiredAuth, this.getUserGroups);
-    this.router.put(`${this.path}/group/:groupId`, RequiredAuth, this.updateGroup);
-    this.router.post(`${this.path}/group/:groupId/member`, RequiredAuth, this.addMember);
-    this.router.delete(`${this.path}/group/:groupId/member/:userId`, RequiredAuth, this.removeMember);
   }
   private getChatHistory = async (
     req: Request,

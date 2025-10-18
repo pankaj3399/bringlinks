@@ -248,12 +248,20 @@ const RoomSchema = new Schema<IRoomsDocument>(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    paid: {
+      type: Boolean,
+      default: false,
+    },
     paidRoom: {
       type: Schema.Types.ObjectId,
       ref: "PaidRooms",
     },
     roomQRCode: {
       type: String,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
     },
     stats: {
       views: {
@@ -281,6 +289,7 @@ RoomSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 RoomSchema.index({
   event_name: "text",
   event_type: "text",
+  event_description: "text",
   event_location_address: "text",
   event_schedule: "text",
   event_typeOther: "text",

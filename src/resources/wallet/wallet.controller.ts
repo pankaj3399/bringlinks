@@ -80,10 +80,10 @@ class WalletController implements Controller {
         userId: userId,
         role: req.user?.role,
         name:
-          userWithWallet.profile.firstName +
+          userWithWallet.firstName +
           "," +
-          userWithWallet.profile.lastName,
-        email: userWithWallet.auth.email,
+          userWithWallet.lastName,
+        email: userWithWallet.email,
       });
 
       if (!token || !refreshToken)
@@ -102,10 +102,10 @@ class WalletController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      const { walletId } = req.params;
+      if (!walletId) res.status(400).send("Id is required");
 
-      const foundWallet = await getWalletById(userId);
+      const foundWallet = await getWalletById(walletId);
       if (!foundWallet) res.status(400).send("Wallet not found");
 
       Logging.info(foundWallet);
@@ -121,10 +121,10 @@ class WalletController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { userId } = req.params;
-      if (!userId) res.status(400).send("Id is required");
+      const { walletId } = req.params;
+      if (!walletId) res.status(400).send("Id is required");
 
-      const updatedWallet = await updateWallet(req.body);
+      const updatedWallet = await updateWallet(walletId, req.body);
       if (!updatedWallet) res.status(400).send("Wallet not updated");
 
       Logging.info(updatedWallet);
@@ -142,7 +142,7 @@ class WalletController implements Controller {
     try {
       const { userId, walletId } = req.params;
 
-      const wallet = await deleteWallet(userId, walletId);
+      const wallet = await deleteWallet(walletId, userId);
       if (!wallet) res.status(400).send("Wallet not deleted");
 
       res.status(200).send("Wallet deleted");

@@ -24,13 +24,18 @@ export const putS3Object = async (
       Body: file,
       ContentType: mimetype,
     });
-    return await s3.send(command).catch((err) => {
-      Logging.error(err.message);
-      throw err.message;
+    return await s3.send(command).catch((err: any) => {
+      const code = err?.name || err?.code;
+      const msg = err?.message || err?.toString?.() || "Unknown S3 error";
+      Logging.error(`S3 send error | code=${String(code)} | message=${String(msg)}`);
+      if (err?.stack) Logging.error(err.stack);
+      throw new Error(msg);
     });
   } catch (err: any) {
-    Logging.error(err);
-    throw err.message;
+    const msg = err?.message || err?.toString?.() || "S3 upload failed";
+    Logging.error(`putS3Object failed | message=${String(msg)}`);
+    if (err?.stack) Logging.error(err.stack);
+    throw new Error(msg);
   }
 };
 
@@ -43,8 +48,10 @@ export const retrieveIMG = async (imageName: string) => {
 
     return await getSignedUrl(s3, command, { expiresIn: 86400 });
   } catch (err: any) {
-    Logging.error(err);
-    throw err.message;
+    const msg = err?.message || err?.toString?.() || "getSignedUrl failed";
+    Logging.error(`retrieveIMG failed | message=${String(msg)}`);
+    if (err?.stack) Logging.error(err.stack);
+    throw new Error(msg);
   }
 };
 

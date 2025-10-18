@@ -428,7 +428,7 @@ class PaidRoomController implements Controller {
       const paid = { success: false, message: "Ticket purchase temporarily disabled" } as any;
 
       // update room Param replace with receiptId
-      const updatedPaidRoom = await buyTickets(userId, req.body, userId);
+      const updatedPaidRoom = await buyTickets(userId, { ...req.body, roomId }, userId);
 
       if (!updatedPaidRoom) return res.status(400).send({ message: paid });
 

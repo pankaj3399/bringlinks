@@ -92,13 +92,25 @@ export const requestPassword = async (userData: {
 
     if (user.auth.email !== email) throw new Error("Email not match");
 
+    let refreshToken = user.refreshToken;
+    if (!refreshToken) {
+      const [, freshToken]: Secret[] = jwt.CreateToken(user._id.toString());
+      if (!freshToken) throw new Error("Failed to generate refresh token");
+      
+      await User.findByIdAndUpdate(
+        { _id: user._id },
+        { $set: { refreshToken: freshToken } }
+      );
+      refreshToken = freshToken;
+    }
+
     // Send email to user
     const { default: EmailService } = await import(
       "../../utils/email/email.service"
     );
     await EmailService.sendPasswordRequestEmail(
       user.auth.email,
-      user.refreshToken
+      refreshToken
     );
 
     return;
@@ -121,20 +133,24 @@ const registerUser = async (userData: any) => {
     };
 
     const allowedStates = parseAllowedStates();
-    const isFromAllowedState = allowedStates.includes(
-      state.trim().toLowerCase()
-    );
-
-    if (!isFromAllowedState) {
-      throw new Error("Service not available in your state");
-    }
-
-    if (signupCode) {
+    const isFromAllowedState = allowedStates.includes(state.trim().toLowerCase());
+    
+    // Case 1: State allowed → signupCode optional, but if provided must be valid
+    if (isFromAllowedState) {
+      if (signupCode) {
+        const isValidCode = await validateAndUseSignupCode(signupCode);
+        if (!isValidCode) {
+          throw new Error("Invalid signup code or code has reached maximum usage limit");
+        }
+      }
+    // Case 2: State NOT allowed → valid signupCode is required to register
+    } else {
+      if (!signupCode) {
+        throw new Error("Service not available in your state without a valid signup code");
+      }
       const isValidCode = await validateAndUseSignupCode(signupCode);
       if (!isValidCode) {
-        throw new Error(
-          "Invalid signup code or code has reached maximum usage limit"
-        );
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
       }
     }
 
@@ -312,7 +328,6 @@ const updatePassword = async (
     if (!foundedUser) throw new Error("User is not found");
 
     hashPass(foundedUser, password);
-
     return foundedUser.populate({
       path: "auth",
       model: "User",
@@ -479,10 +494,6 @@ const unfollowAUser = async (follower_id: string, user_id: string) => {
       { _id: followeeId },
       {
         $pull: { following: userId },
-      },
-      (err: any) => {
-        Logging.error(err);
-        if (err) throw err;
       }
     ).clone();
 
@@ -598,43 +609,42 @@ export const getIMG = async (id: string) => {
 
     if (!imgUrl) throw new Error("Image not found");
 
-    foundUser.profile.avi.aviUrl = imgUrl;
-
-    await foundUser.save().catch((err: any) => {
-      throw err.message;
-    });
-
-    return foundUser.profile.avi.aviUrl;
+    
+    return imgUrl;
   } catch (err: any) {
-    Logging.error(err.message);
-    throw err.message;
+    const msg = typeof err === "string" ? err : err?.message || "getIMG failed";
+    Logging.error(`getIMG failed | message=${String(msg)}`);
+    if (err?.stack) Logging.error(err.stack);
+    throw new Error(msg);
   }
 };
 export const deleteIMG = async (id: string) => {
   try {
     const _id = id as string;
-    const foundUser = await User.findOne({ _id: _id }).clone();
+    const foundUser = await User.findOne({ _id }).lean();
 
-    if (!foundUser) throw new Error("user not found");
+    if (!foundUser) throw new Error("User not found");
 
-    await deleteAviIMG(foundUser.profile.avi.aviName);
+    const aviName = foundUser?.profile?.avi?.aviName as string | undefined;
+    if (!aviName || aviName.length === 0) throw new Error("Image not found");
 
-    const updatedUser = await User.updateOne(
-      { _id: _id },
+    await deleteAviIMG(aviName);
+
+    const updated = await User.updateOne(
+      { _id },
       {
-        $pull: {
-          avi: {
-            aviUrl: undefined,
-            aviName: undefined,
-          },
+        $unset: {
+          "profile.avi.aviUrl": "",
+          "profile.avi.aviName": "",
         },
       }
-    ).clone();
+    ).exec();
 
-    return updatedUser.upsertedCount;
+    return updated.modifiedCount > 0;
   } catch (err: any) {
-    Logging.error(err.message);
-    throw err.message;
+    const msg = err?.message || err?.toString?.() || "Delete image failed";
+    Logging.error(msg);
+    throw new Error(msg);
   }
 };
 

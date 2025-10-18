@@ -34,40 +34,50 @@ const getAPostById = async (_id: string, user_id: string) => {
 
 const getNearPost = async (
   userId: string,
-  location: Pick<CurrentLo, "type" | "coordinates">
+  lng: number,
+  ltd: number
 ) => {
   try {
     const user_id = userId as string;
     if (!user_id) throw new Error("User not found");
 
-    const user = await User.findByIdAndUpdate(
-      { _id: user_id },
-      {
-        $set: {
-          "location.currentLocation": location,
-        },
-      }
-    );
+    const user = await User.findOne({ _id: user_id });
     if (!user) throw new Error("User not found");
-    const convertRadius = user.profile.location.radiusPreference * 1609.34;
+    
+    let radiusPreference;
+    if (user.profile?.location?.radiusPreference) {
+      radiusPreference = user.profile.location.radiusPreference;
+    } else if ((user as any).location?.radiusPreference) {
+      radiusPreference = (user as any).location.radiusPreference;
+    } else {
+      throw new Error("radius preference is needed");
+    }
+    
+    const convertRadius = radiusPreference * 1609.34;
 
-    const [lng, lat] = user.profile.location.currentLocation.coordinates;
+    const coordinates = [lng, ltd];
+    Logging.info(`Using coordinates from parameters: ${JSON.stringify(coordinates)}`);
+    
+    if (isNaN(lng) || isNaN(ltd)) {
+      throw new Error(`Location coordinates must be valid numbers. Got lng: ${lng}, lat: ${ltd}`);
+    }
 
-    const nearPost = await Posts.aggregate([
-      {
-        $geoNear: {
-          near: { type: "Point", coordinates: [lng, lat] },
-          distanceField: "distance",
-          spherical: true,
-          maxDistance: convertRadius,
-          key: "postedLocation",
+    const nearPost = await Posts.find({
+      postedLocation: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, ltd],
+          },
+          $maxDistance: convertRadius,
         },
       },
-    ]);
+    });
 
     return nearPost ?? [];
   } catch (err: any) {
-    Logging.error(err);
+    Logging.error(`Error in getNearPost: ${err}`);
+    throw err;
   }
 };
 
@@ -185,7 +195,7 @@ const likeAPost = async (post_id: string, user_id: string) => {
 
     if (!updatedPost) throw new Error("failed to add like");
 
-    return (
+    const populatedPost = await (
       await updatedPost.populate({
         path: "user_Id",
         model: "User",
@@ -193,8 +203,14 @@ const likeAPost = async (post_id: string, user_id: string) => {
           "_id auth.username profile.location.currentLocation.coordinates",
       })
     ).populate({ path: "likes", model: "Likes" });
+
+    return {
+      post: populatedPost,
+      likeId: like._id
+    };
   } catch (err: any) {
     Logging.log(err);
+    throw err;
   }
 };
 const unLikeAPost = async (

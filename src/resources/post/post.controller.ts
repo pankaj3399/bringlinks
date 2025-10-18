@@ -65,13 +65,12 @@ class PostController implements Controller {
       validationMiddleware(validate.createPost),
       this.createAPost
     );
-    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, this.getPost);
     this.router.get(
       `${this.path}/nearpost/:userId`,
       RequiredAuth,
-      validationMiddleware(validate.getNearPost),
       this.getNearPost
     );
+    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, this.getPost);
     this.router.delete(
       `${this.path}/deletepost/:userid/:postid`,
       RequiredAuth,
@@ -119,16 +118,22 @@ class PostController implements Controller {
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
+      const { lng, ltd } = req.query;
+      
       if (!userId) return res.status(400).json({ message: "Id is required" });
+      if (lng == null || ltd == null) return res.status(400).json({ message: "Location coordinates are needed" });
 
-      const foundPost = await getNearPost(userId, req.body);
-      if (!foundPost)
-        return res.status(400).json({ message: "Post not found" });
+      const lngNum = Number(String(lng).replace(/\s+/g, ""));
+      const ltdNum = Number(String(ltd).replace(/\s+/g, ""));
+      if (!Number.isFinite(lngNum) || !Number.isFinite(ltdNum)) {
+        return res.status(400).json({ message: "Invalid location coordinates" });
+      }
 
+      const foundPost = await getNearPost(userId, lngNum, ltdNum);
       res.status(200).json(foundPost);
     } catch (err: any) {
-      Logging.error(err);
-      new HttpException(500, err);
+      Logging.error(`Error in getNearPost controller: ${err}`);
+      next(new HttpException(500, err.message));
     }
   };
   private getPost = async (

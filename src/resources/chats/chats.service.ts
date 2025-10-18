@@ -356,7 +356,7 @@ export const createMessageWithMedia = async (messageData: IMessageRequest): Prom
 
     if (chatType === ChatTypes.group && groupId) {
       await GroupModel.findByIdAndUpdate(groupId, {
-        $push: { chat_Id: newMessage._id }
+        $set: { chat_Id: newMessage._id }
       });
     } else if (chatType === ChatTypes.room && roomId) {
       await Rooms.findByIdAndUpdate(roomId, {

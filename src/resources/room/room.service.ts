@@ -1,5 +1,5 @@
 import mongoose, { Error } from "mongoose";
-import { IRoles, IUserDocument } from "resources/user/user.interface";
+import { IRoles, IUserDocument, IUserPreferences } from "resources/user/user.interface";
 import User from "../user/user.model";
 import Logging from "../../library/logging";
 import {
@@ -20,22 +20,38 @@ import { validateEnv } from "../../../config/validateEnv";
 
 
 const getARoom = async (id: string) => {
-  const _id = id as string;
   try {
-    const foundedRoom = await Rooms.findById(_id);
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      Logging.warning(`Invalid room ID format: ${id}`);
+      throw new Error("Invalid room ID format");
+    }
 
-    if (!foundedRoom) throw new Error("Room not found");
-    return foundedRoom.populate([
-      { path: "created_user", model: "User" },
-      { 
-        path: "shares", 
-        model: "Share",
-        select: "platform shareType shareUrl analytics createdAt"
-      }
-    ]);
+    const foundedRoom = await Rooms.findById(id)
+      .populate([
+        {
+          path: "created_user",
+          model: "User",
+          select: "_id username profile.name"
+        },
+        {
+          path: "shares",
+          model: "Share",
+          select: "platform shareType shareUrl analytics createdAt"
+        }
+      ])
+      .lean()
+      .exec();
+
+    if (!foundedRoom) {
+      Logging.warning(`Room not found with id: ${id}`);
+      throw new Error("Room not found");
+    }
+
+    Logging.info(`Room found: ${id}`);
+    return foundedRoom;
   } catch (err: any) {
-    Logging.error(err);
-    throw err;
+    Logging.error(`Error in getARoom: ${err.message}`);
+    throw new Error(err.message);
   }
 };
 
@@ -86,8 +102,8 @@ const getAllRooms = async () => {
   try {
     const allRooms = await Rooms.find().populate([
       { path: "created_user", model: "User" },
-      { 
-        path: "shares", 
+      {
+        path: "shares",
         model: "Share",
         select: "platform shareType shareUrl analytics createdAt"
       }
@@ -165,11 +181,14 @@ const createRoom = async (
 
     // create a room
     const createdRoom = await Rooms.create(sanitized);
-    if (!createRoom) throw new Error("Room is not created");
+    if (!createdRoom) throw new Error("Room is not created");
 
     await Rooms.updateOne(
       { _id: createdRoom._id },
-      { $addToSet: { created_user, entered_id: created_user, event_admin: created_user } }
+      {
+        $set: { created_user: created_user },
+        $addToSet: { entered_id: created_user, event_admin: created_user }
+      }
     ).clone();
 
     await User.updateOne(
@@ -183,7 +202,10 @@ const createRoom = async (
       { new: true }
     ).exec();
 
-    return await createdRoom.populate({
+    const updatedRoom = await Rooms.findById(createdRoom._id);
+    if (!updatedRoom) throw new Error("Room not found after update");
+
+    return await updatedRoom.populate({
       path: "created_user",
       model: "User",
       select: "_id",
@@ -340,17 +362,39 @@ export const getRelatedRooms = async (user_id: string) => {
 
     const userPreferences = foundedUser.userPreferences;
 
-    const foundedRooms = await Rooms.find({
-      $or: [
-        // { event_typeOther: userPreferences.favoriteTypesOfRooms?.title },
-        // { event_type: userPreferences.favoriteTypesOfRooms?.title },
-        // {
-        //   "event_location_address.city_state":
-        //     userPreferences.favoriteCityState?.formatedAddress,
-        // },
-        // { event_description: userPreferences.favoriteTypesOfRooms?.name },
-      ],
-    }).select("-event_location_address -event_location ");
+    const orConditions: Record<string, any>[] = [];
+
+    // Add conditions based on user preferences if they exist
+    if (userPreferences?.favoriteTypesOfRooms && userPreferences.favoriteTypesOfRooms.length > 0) {
+      userPreferences.favoriteTypesOfRooms.forEach(pref => {
+        if (pref.title) {
+          orConditions.push(
+            { event_typeOther: pref.title },
+            { event_type: pref.title }
+          );
+        }
+        if (pref.name) {
+          orConditions.push({
+            event_description: pref.name
+          });
+        }
+      });
+    }
+
+    if (userPreferences?.favoriteCityState && userPreferences.favoriteCityState.length > 0) {
+      userPreferences.favoriteCityState.forEach(cityPref => {
+        if (cityPref.formatedAddress) {
+          orConditions.push({
+            "event_location_address.city_state": cityPref.formatedAddress
+          });
+        }
+      });
+    }
+
+    // If no conditions are available, return all rooms (fallback)
+    const query = orConditions.length > 0 ? { $or: orConditions } : {};
+
+    const foundedRooms = await Rooms.find(query).select("-event_location_address -event_location ");
 
     if (!foundedRooms) throw new Error("Room not found");
 
@@ -651,12 +695,13 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
       throw new Error("current location is needed");
 
     const nearbyRooms = await Rooms.find({
+      //uncomment if you want to only show more than 4 weeks old rooms 
       // Rooms that are no more than 4 weeks old
-      event_schedule: {
-        endDate: {
-          $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
-        },
-      },
+      // event_schedule: {
+      //   endDate: {
+      //     $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
+      //   },
+      // },
       // Rooms that are not private
       event_privacy: {
         $ne: RoomPrivacy.private,

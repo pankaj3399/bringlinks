@@ -30,6 +30,7 @@ export interface IRooms extends Document {
   paidRoom: mongoose.Types.ObjectId;
   venueVerification: IMGNames;
   stats: StatsType;
+  deletedAt: Date | null;
 }
 
 export type sponsorType = {

@@ -110,7 +110,7 @@ class UserController implements Controller {
       `${this.path}/deactivate/:userId`,
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
-      isUserAccount,
+      // isUserAccount,
       this.deactivateUser
     );
     this.router.get(`${this.path}/logout/:userId`, RequiredAuth, this.logout);
@@ -481,8 +481,9 @@ class UserController implements Controller {
 
       res.status(201).send({ signedUrl });
     } catch (err: any) {
-      const msg =
-        typeof err === "string" ? err : err?.message || "Upload failed";
+      Logging.error(`uploadIMG failed | error=${String(err?.message || err)}`);
+      if (err?.stack) Logging.error(err.stack);
+      const msg = typeof err === "string" ? err : err?.message || "Upload failed";
       next(new HttpException(400, msg));
     }
   };
@@ -521,12 +522,12 @@ class UserController implements Controller {
     try {
       const { userId } = req.params;
       if (!userId) return res.status(400).send("Id is required");
-      const foundImage = await deleteIMG(userId);
+      const deleted = await deleteIMG(userId);
 
-      if (!foundImage)
+      if (!deleted)
         return res.status(400).json({ message: "Image not found" });
 
-      res.status(200).send(foundImage);
+      res.status(200).send({ success: true });
     } catch (err: any) {
       next(new HttpException(400, err.message));
     }
