@@ -78,7 +78,8 @@ class EmailService {
       | string
       | undefined;
     const fromEmail =
-      ((validateEnv as any).EMAIL_FROM as string | undefined) || (adminEmail as string);
+      ((validateEnv as any).EMAIL_FROM as string | undefined) ||
+      (adminEmail as string);
 
     if (!email || email.trim().length === 0 || !refreshToken) {
       throw new Error("Missing Email or Refresh Token");
@@ -87,10 +88,9 @@ class EmailService {
       validateEnv.NODE_ENV === "development" ||
       validateEnv.NODE_ENV === "staging"
     ) {
-      link = "http://localhost:8081/reset-password/?token=" + refreshToken;
+      link = "blu://reset-password?token=" + refreshToken;
     } else {
-      link =
-        "https://bringinglinkups.com/reset-password/?token=" + refreshToken;
+      link = "blu://reset-password?token=" + refreshToken;
     }
 
     const subject = "Password Request";

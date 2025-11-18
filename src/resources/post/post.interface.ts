@@ -18,6 +18,7 @@ export interface IPost extends Document {
 export type StatsType = {
   views: number;
   timeViewed: number;
+  totalSecondsViewed: number;
   score: number;
 };
 

@@ -7,6 +7,8 @@ import Rooms from "../resources/room/room.model";
 import Likes from "../resources/likes/likes.model";
 import Logging from "../library/logging";
 import { RoomPrivacy } from "../resources/room/room.interface";
+import { verifyRefreshToken } from "../utils/authentication/jwt.createtoken";
+import jwt from "jsonwebtoken";
 
 //check if refresh token belongs to the user
 export const isUserRefreshToken = async (
@@ -15,13 +17,23 @@ export const isUserRefreshToken = async (
   next: NextFunction
 ) => {
   try {
-    const paramUserId = String(req.params.userId);
-    const authUserId = String(req.user?._id);
-    if (paramUserId !== authUserId)
-      return res.status(403).send({ message: "Must have valid user id" });
-    const user_Id = authUserId as string;
+    if (!req.params.refreshToken)
+      return res.status(400).send("Refresh token is required");
 
-    const foundUser = await User.findById(user_Id);
+    const decoded = verifyRefreshToken(
+      req.params.refreshToken
+    ) as jwt.JwtPayload;
+    Logging.log(`decoded ${JSON.stringify(decoded)}`);
+    const userId = decoded?.payload?._id;
+
+    if (!userId) return res.status(400).send("Refresh token is invalid");
+
+    req.user = { _id: userId } as any;
+
+    const foundUser = await User.findOne({
+      _id: userId,
+      refreshToken: req.params.refreshToken,
+    });
     if (!foundUser)
       return res.status(403).send({ message: "Must be your account" });
 
@@ -274,10 +286,7 @@ export const roomAdminPermissions = async (
 
     const foundRoom = await Rooms.findOne({
       _id: room_Id,
-      $or: [
-        { event_admin: user_Id },
-        { event_admin: userObjectId },
-      ],
+      $or: [{ event_admin: user_Id }, { event_admin: userObjectId }],
     }).clone();
 
     if (!foundRoom)

@@ -88,10 +88,19 @@ export enum Types {
   Polygon = "Polygon",
 }
 export interface Demo {
+  gender: GenderType;
   race: Race;
   age: Number;
   culture: Culture;
 }
+export enum GenderType {
+  Male = "Male",
+  Female = "Female",
+  Transgender = "Transgender",
+  NonBinary = "NonBinary",
+  NoAnswer = "NoAnswer",
+}
+
 export enum Culture {
   urban = "URBAN",
   suburan = "SUBURBAN",

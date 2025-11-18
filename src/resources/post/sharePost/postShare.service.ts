@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import PostShare, { IPostShare, PostSharePlatform, PostShareType } from "./postShare.model";
-import Posts from "./post.model";
-import { validateEnv } from "../../../config/validateEnv";
-import Logging from "../../library/logging";
+import PostShare, { PostSharePlatform, PostShareType } from "./postShare.model";
+import Posts from "../post.model";
+import { validateEnv } from "../../../../config/validateEnv";
+import Logging from "../../../library/logging";
 
 export const generatePostShareLinks = async (
   postId: string,
@@ -10,9 +10,9 @@ export const generatePostShareLinks = async (
   userId?: string
 ) => {
   try {
-    const baseUrl = validateEnv.FRONTEND_URL.replace(/\/$/, ''); 
+    const baseUrl = validateEnv.FRONTEND_URL.replace(/\/$/, "");
     const postUrl = `${baseUrl}/post/${postId}`;
-    
+
     let originalUrl = postUrl;
     if (shareType === PostShareType.POST_PROMOTION) {
       originalUrl = `${baseUrl}/post/${postId}?promo=true`;
@@ -22,7 +22,7 @@ export const generatePostShareLinks = async (
       facebook: generateFacebookShareUrl(originalUrl),
       tiktok: generateTikTokShareUrl(originalUrl),
       sms: generateSMSShareUrl(originalUrl),
-      inAppMessage: originalUrl
+      inAppMessage: originalUrl,
     };
 
     return shareLinks;
@@ -39,9 +39,9 @@ export const trackPostShare = async (
   shareType: PostShareType = PostShareType.POST_SHARE
 ) => {
   try {
-    const baseUrl = validateEnv.FRONTEND_URL.replace(/\/$/, ''); 
+    const baseUrl = validateEnv.FRONTEND_URL.replace(/\/$/, "");
     const postUrl = `${baseUrl}/post/${postId}`;
-    
+
     let originalUrl = postUrl;
     if (shareType === PostShareType.POST_PROMOTION) {
       originalUrl = `${baseUrl}/post/${postId}?promo=true`;
@@ -50,29 +50,29 @@ export const trackPostShare = async (
     const shareUrl = generateShareUrl(originalUrl, platform);
 
     let share = await PostShare.findOne({ shareUrl });
-    
+
     if (!share) {
-      share =  await PostShare.create({
+      share = await PostShare.create({
         postId: new mongoose.Types.ObjectId(postId),
         userId: new mongoose.Types.ObjectId(userId),
         platform,
         shareType,
-        shareUrl
+        shareUrl,
       });
 
       await Posts.findByIdAndUpdate(postId, {
-        $push: { shares: share._id }
+        $push: { shares: share._id },
       });
     }
 
     await PostShare.findByIdAndUpdate(share._id, {
-      $inc: { "analytics.shares": 1 }
+      $inc: { "analytics.shares": 1 },
     });
 
     return {
       shareId: share._id,
       shareUrl: share.shareUrl,
-      platform: share.platform
+      platform: share.platform,
     };
   } catch (error: any) {
     Logging.error(`Error tracking post share: ${error.message}`);
@@ -88,7 +88,7 @@ export const trackPostShareClick = async (shareUrl: string) => {
     }
 
     await PostShare.findByIdAndUpdate(share._id, {
-      $inc: { "analytics.clicks": 1 }
+      $inc: { "analytics.clicks": 1 },
     });
 
     return share;
@@ -100,10 +100,10 @@ export const trackPostShareClick = async (shareUrl: string) => {
 
 export const getPostShareAnalytics = async (postId: string) => {
   try {
-    const Posts = (await import("./post.model")).default;
+    const Posts = (await import("../post.model")).default;
     const post = await Posts.findById(postId).populate({
       path: "shares",
-      select: "platform shareType shareUrl analytics createdAt"
+      select: "platform shareType shareUrl analytics createdAt",
     });
 
     if (!post) {
@@ -123,10 +123,10 @@ export const getPostShareAnalytics = async (postId: string) => {
               platform: "$platform",
               shares: "$analytics.shares",
               clicks: "$analytics.clicks",
-              conversions: "$analytics.conversions"
-            }
-          }
-        }
+              conversions: "$analytics.conversions",
+            },
+          },
+        },
       },
       {
         $project: {
@@ -134,7 +134,7 @@ export const getPostShareAnalytics = async (postId: string) => {
           totalStats: {
             totalShares: "$totalShares",
             totalClicks: "$totalClicks",
-            totalConversions: "$totalConversions"
+            totalConversions: "$totalConversions",
           },
           platformBreakdown: {
             $map: {
@@ -144,20 +144,20 @@ export const getPostShareAnalytics = async (postId: string) => {
                 _id: "$$platform.platform",
                 totalShares: "$$platform.shares",
                 totalClicks: "$$platform.clicks",
-                totalConversions: "$$platform.conversions"
-              }
-            }
-          }
-        }
-      }
+                totalConversions: "$$platform.conversions",
+              },
+            },
+          },
+        },
+      },
     ]);
 
     return {
-      ...analytics[0] || {
+      ...(analytics[0] || {
         totalStats: { totalShares: 0, totalClicks: 0, totalConversions: 0 },
-        platformBreakdown: []
-      },
-      shares: post.shares || []
+        platformBreakdown: [],
+      }),
+      shares: post.shares || [],
     };
   } catch (error: any) {
     Logging.error(`Error getting post share analytics: ${error.message}`);
@@ -166,7 +166,9 @@ export const getPostShareAnalytics = async (postId: string) => {
 };
 
 function generateFacebookShareUrl(url: string): string {
-  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+  return `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+    url
+  )}`;
 }
 
 function generateTikTokShareUrl(url: string): string {
@@ -177,8 +179,11 @@ function generateSMSShareUrl(url: string): string {
   return `sms:?body=${encodeURIComponent(`Check out this post: ${url}`)}`;
 }
 
-function generateShareUrl(originalUrl: string, platform: PostSharePlatform): string {
-  const encodedUrl = Buffer.from(originalUrl, 'utf-8').toString('base64');
-  const baseUrl = 'http://localhost:3000';
+function generateShareUrl(
+  originalUrl: string,
+  platform: PostSharePlatform
+): string {
+  const encodedUrl = Buffer.from(originalUrl, "utf-8").toString("base64");
+  const baseUrl = "http://localhost:3000";
   return `${baseUrl}/posts/share/${platform}/${encodedUrl}`;
 }

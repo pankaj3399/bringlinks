@@ -36,10 +36,9 @@ import { ImageNAME } from "../../utils/ImageServices/helperFunc.ts/room.Img";
 import { validateEnv } from "../../../config/validateEnv";
 import { Secret } from "jsonwebtoken";
 import { AuthorizeRole, RequiredAuth } from "../../middleware/auth.middleware";
-import { IRoles, IUserDocument } from "./user.interface";
+import { IRoles, IUsers } from "./user.interface";
 import { putS3Object } from "../../utils/ImageServices/user.Img";
 import { UploadedFile } from "express-fileupload";
-import fileUpload from "express-fileupload";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
 const imgName = ImageNAME();
 
@@ -101,7 +100,7 @@ class UserController implements Controller {
       this.getSchedule
     );
     this.router.patch(
-      `${this.path}/updatepassword/:userId/:refreshToken`,
+      `${this.path}/updatepassword/:refreshToken`,
       validationMiddleware(validate.changePassword),
       isUserRefreshToken,
       this.changePassword
@@ -157,7 +156,9 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const [createdUser, token, refreshToken] = await registerUser(req.body);
+      const [createdUser, token, refreshToken] = await registerUser(
+        req.body as unknown as Partial<IUsers>
+      );
 
       res.cookie(validateEnv.COOKIE, token);
       res.status(201).send({ createdUser, token, refreshToken });
@@ -390,13 +391,19 @@ class UserController implements Controller {
     try {
       if (!req.user?._id)
         return res.status(401).json({ message: "Unauthorized" });
-      const user = await updatePassword(req.body, req.user._id as string);
+      if (!req.body.auth.password)
+        return res.status(400).json({ message: "Password is required" });
 
+      const user = await updatePassword(
+        req.body.auth.password,
+        req.user._id as string
+      );
+      Logging.log(user);
       if (!user)
         return res.status(400).json({ message: "Error updating password" });
 
-      //cerate new token
-      const [token, refreshToken]: Secret[] | any = await refreshTokenUser(
+      //create new token
+      const [token, refreshToken]: Secret[] = await refreshTokenUser(
         user.refreshToken,
         user._id
       );
@@ -483,7 +490,8 @@ class UserController implements Controller {
     } catch (err: any) {
       Logging.error(`uploadIMG failed | error=${String(err?.message || err)}`);
       if (err?.stack) Logging.error(err.stack);
-      const msg = typeof err === "string" ? err : err?.message || "Upload failed";
+      const msg =
+        typeof err === "string" ? err : err?.message || "Upload failed";
       next(new HttpException(400, msg));
     }
   };
@@ -524,8 +532,7 @@ class UserController implements Controller {
       if (!userId) return res.status(400).send("Id is required");
       const deleted = await deleteIMG(userId);
 
-      if (!deleted)
-        return res.status(400).json({ message: "Image not found" });
+      if (!deleted) return res.status(400).json({ message: "Image not found" });
 
       res.status(200).send({ success: true });
     } catch (err: any) {

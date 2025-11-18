@@ -1,6 +1,7 @@
 import mongoose, { Schema, model } from "mongoose";
 import {
   Culture,
+  GenderType,
   IRoles,
   IUserDocument,
   IUserModel,
@@ -110,6 +111,11 @@ const UserSchema = new Schema<IUserDocument>(
         race: {
           type: String,
           enum: Race,
+          required: false,
+        },
+        gender: {
+          type: String,
+          enum: GenderType,
           required: false,
         },
         age: {
@@ -230,13 +236,13 @@ const UserSchema = new Schema<IUserDocument>(
         ref: "Chats",
       },
     ],
-      phoneNumber: { type: String },
-      state: { type: String },
-      // otp: { type: String },
-      // otpExpiry: { type: Date },
-      isVerified: { type: Boolean, default: false },
-      // appleId: { type: String },
-      googleId: { type: String },
+    phoneNumber: { type: String },
+    state: { type: String },
+    // otp: { type: String },
+    // otpExpiry: { type: Date },
+    isVerified: { type: Boolean, default: false },
+    // appleId: { type: String },
+    googleId: { type: String },
   },
   { timestamps: true, minimize: false }
 );
@@ -250,7 +256,10 @@ UserSchema.index({ followers: 1 });
 UserSchema.index({ following: 1 });
 UserSchema.index({ created_rooms: 1 });
 
-UserSchema.methods.comparePass = async function(pass: string, password: string) {
+UserSchema.methods.comparePass = async function (
+  pass: string,
+  password: string
+) {
   Logging.log(`entered ${pass}`);
   Logging.log(`Saved password: ${password}`);
   const comparedPass = await bcrypt.compare(pass, password);
@@ -258,7 +267,7 @@ UserSchema.methods.comparePass = async function(pass: string, password: string) 
   return comparedPass;
 };
 
-UserSchema.methods.setAge = function(birthDate: Date): number {
+UserSchema.methods.setAge = function (birthDate: Date): number {
   var today = new Date();
   var age = today.getFullYear() - birthDate.getFullYear();
   var m = today.getMonth() - birthDate.getMonth();
@@ -301,7 +310,9 @@ UserSchema.pre("save", async function (next) {
   if (!user.isModified("profile.birthDate")) {
     return next();
   } else {
-    (user as any).profile.demographic.age = (UserSchema.methods as any).setAge((user as any).profile.birthDate);
+    user.profile.demographic.age = UserSchema.methods.setAge(
+      user.profile.birthDate
+    );
     next();
   }
 

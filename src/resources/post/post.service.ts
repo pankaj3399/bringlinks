@@ -6,7 +6,7 @@ import Likes from "../likes/likes.model";
 import { IComments } from "../comments/comments.interface";
 import Comments from "../comments/comments.model";
 import User from "../user/user.model";
-import { CurrentLo } from "resources/user/user.interface";
+import { roomsNearBy } from "../room/room.service";
 
 const getAPostById = async (_id: string, user_id: string) => {
   try {
@@ -24,26 +24,91 @@ const getAPostById = async (_id: string, user_id: string) => {
       {
         path: "shares",
         model: "PostShare",
-        select: "platform shareType shareUrl analytics createdAt"
-      }
+        select: "platform shareType shareUrl analytics createdAt",
+      },
     ]);
   } catch (err: any) {
     Logging.error(err);
   }
 };
+export const getUserPosts = async (userId: string, postId: string) => {
+  try {
+    const user_id = userId as string;
 
-const getNearPost = async (
+    let posts = await Posts.findOne({
+      user_Id: user_id,
+      _id: postId,
+    });
+    if (!posts) throw new Error("Post not found");
+
+    return posts;
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
+export const getNearRoomPost = async (
   userId: string,
   lng: number,
   ltd: number
 ) => {
+  try {
+    var media = [];
+    const foundedUser = await User.findOne({ _id: userId }).clone();
+    if (!foundedUser?.profile.location.radiusPreference) {
+      throw new Error("radius preference is needed");
+    }
+    const radiusPrefMeters =
+      foundedUser?.profile.location.radiusPreference * 1609.34;
+
+    if (!foundedUser.profile.location.currentLocation)
+      throw new Error("current location is needed");
+
+    // get nearby Rooms
+    const nearbyRooms = await roomsNearBy(userId, lng, ltd);
+    if (!nearbyRooms) return [];
+
+    for (const room of nearbyRooms) {
+      const roomId = room._id;
+
+      const nearbyPosts = await Posts.find({
+        // Commented out for now
+        // Posts that are no more than 4 weeks old
+        event_schedule: {
+          endDate: {
+            $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
+          },
+        },
+        // Posts that are not private
+        // Posts that are near the user's current location
+        postedLocation: {
+          $near: {
+            $geometry: {
+              type: "Point",
+              coordinates: [lng, ltd],
+            },
+            $maxDistance: radiusPrefMeters,
+          },
+        },
+        room_Id: roomId,
+      });
+      if (!nearbyPosts) return media;
+      media.push(...nearbyPosts);
+    }
+    return media;
+  } catch (err: any) {
+    Logging.error(`Error in getNearPost: ${err}`);
+    throw err;
+  }
+};
+
+const getNearPost = async (userId: string, lng: number, ltd: number) => {
   try {
     const user_id = userId as string;
     if (!user_id) throw new Error("User not found");
 
     const user = await User.findOne({ _id: user_id });
     if (!user) throw new Error("User not found");
-    
+
     let radiusPreference;
     if (user.profile?.location?.radiusPreference) {
       radiusPreference = user.profile.location.radiusPreference;
@@ -52,14 +117,18 @@ const getNearPost = async (
     } else {
       throw new Error("radius preference is needed");
     }
-    
+
     const convertRadius = radiusPreference * 1609.34;
 
     const coordinates = [lng, ltd];
-    Logging.info(`Using coordinates from parameters: ${JSON.stringify(coordinates)}`);
-    
+    Logging.info(
+      `Using coordinates from parameters: ${JSON.stringify(coordinates)}`
+    );
+
     if (isNaN(lng) || isNaN(ltd)) {
-      throw new Error(`Location coordinates must be valid numbers. Got lng: ${lng}, lat: ${ltd}`);
+      throw new Error(
+        `Location coordinates must be valid numbers. Got lng: ${lng}, lat: ${ltd}`
+      );
     }
 
     const nearPost = await Posts.find({
@@ -143,6 +212,128 @@ const deleteAPost = async (user_id: string, post_id: string) => {
     Logging.error(err);
   }
 };
+export const getNearbyPosts = async (
+  userId: string,
+  lng: number,
+  ltd: number
+) => {
+  try {
+    const foundedUser = await User.findOne({ _id: userId }).clone();
+
+    if (!foundedUser?.profile.location.radiusPreference) {
+      throw new Error("radius preference is needed");
+    }
+    const radiusPrefMeters =
+      foundedUser?.profile.location.radiusPreference * 1609.34;
+
+    if (!foundedUser.profile.location.currentLocation)
+      throw new Error("current location is needed");
+
+    const nearbyPosts = await Posts.find({
+      // Commented out for now
+      // Posts that are no more than 4 weeks old
+      // event_schedule: {
+      //   endDate: {
+      //     $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
+      //   },
+      // },
+      // Posts that are not private
+      // Posts that are near the user's current location
+      postedLocation: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, ltd],
+          },
+          $maxDistance: radiusPrefMeters,
+        },
+      },
+      user_Id: userId,
+    });
+
+    return nearbyPosts;
+  } catch (err: any) {
+    Logging.error(`Error in getNearbyPosts: ${err}`);
+    throw err;
+  }
+};
+export const getRoomPost = async (roomId: string) => {
+  try {
+    const nearbyPosts = await Posts.find({
+      room_Id: roomId,
+    }).populate([
+      {
+        path: "room_Id",
+        model: "Rooms",
+        select:
+          "event_name event_type event_typeOther event_location_address event_location event_schedule event_privacy paid created_user event_flyer_img event_media_img event_venue_image specialGuest event_sponsors shares stats",
+      },
+      {
+        path: "shares",
+        model: "PostShare",
+        select: "platform shareType shareUrl analytics createdAt",
+      },
+    ]);
+
+    return nearbyPosts;
+  } catch (err: any) {
+    Logging.error(`Error in getNearPost: ${err}`);
+    throw err;
+  }
+};
+export const getUserPost = async (userId: string) => {
+  try {
+    const foundedPost = await Posts.find({ user_Id: userId }).populate([
+      {
+        path: "user_Id",
+        model: "User",
+        select:
+          "-auth.username -auth.password -role -refreshToken -pendingRoomsRequest",
+      },
+      {
+        path: "shares",
+        model: "PostShare",
+        select: "platform shareType shareUrl analytics createdAt",
+      },
+    ]);
+    if (!foundedPost) throw new Error("Post not found");
+    return foundedPost;
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
+
+export const updatePostMedia = async (
+  postid: string,
+  media: string,
+  fileName: string
+) => {
+  try {
+    const foundPost = await Posts.findByIdAndUpdate(
+      { _id: postid },
+      {
+        $set: { "content.url": media, "content.name": fileName },
+      },
+      { new: true }
+    );
+    if (!foundPost) throw new Error(`Post isn't updated`);
+    return foundPost.populate([
+      {
+        path: "user_Id",
+        model: "User",
+        select:
+          " -auth.username -auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
+      },
+      {
+        path: "shares",
+        model: "PostShare",
+        select: "platform shareType shareUrl analytics createdAt",
+      },
+    ]);
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
 
 const updatePost = async (post: Partial<IPostDocument>) => {
   try {
@@ -206,7 +397,7 @@ const likeAPost = async (post_id: string, user_id: string) => {
 
     return {
       post: populatedPost,
-      likeId: like._id
+      likeId: like._id,
     };
   } catch (err: any) {
     Logging.log(err);
@@ -275,6 +466,48 @@ const comment = async (
     );
 
     return postComments?.populate({ path: "comments", model: "Comments" });
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
+export const updateViews = async (postId: string) => {
+  try {
+    const post = await Posts.findByIdAndUpdate(
+      { _id: postId },
+      {
+        $inc: { "stats.views": 1 },
+      },
+      { new: true }
+    );
+
+    return post?.populate({
+      path: "comments",
+      model: "Comments",
+      select: "-stats",
+    });
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
+
+export const updatePostStats = async (postId: string, timeViewed: number) => {
+  try {
+    // update post stats with timeViewed in seconds
+    const post = await Posts.findByIdAndUpdate(
+      { _id: postId },
+      {
+        $inc: { "stats.totalSecondsViewed": timeViewed },
+      },
+      { new: true, upsert: true }
+    );
+
+    if (!post) throw new Error("Post not found");
+
+    return post.populate({
+      path: "comments",
+      model: "Comments",
+      select: "-stats",
+    });
   } catch (err: any) {
     Logging.error(err);
   }

@@ -19,9 +19,7 @@ const PostSchema = new Schema<IPostDocument>(
     // date and time of post
     date: {
       type: Date,
-      default: function (this: IPostDocument) {
-        return this.date ? this.date : Date.now();
-      },
+      default: Date.now,
     },
     // number of likes
     likes_count: {
@@ -75,7 +73,7 @@ const PostSchema = new Schema<IPostDocument>(
         type: Number,
         default: 0,
       },
-      timeViewed: {
+      totalSecondsViewed: {
         type: Number,
         default: 0,
       },
@@ -89,6 +87,11 @@ const PostSchema = new Schema<IPostDocument>(
 );
 
 PostSchema.index({ postedLocation: "2dsphere" });
+PostSchema.index({ user_Id: 1 });
+PostSchema.index({ room_Id: 1 });
+PostSchema.index({ _id: 1, user_Id: 1 });
+PostSchema.index({ _id: 1, post_Id: 1 });
+PostSchema.index({ _id: 1, user_id: 1, post_Id: 1 });
 
 PostSchema.statics.findPostById = function (_id: string) {
   return this.findOne({ _id });

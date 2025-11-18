@@ -5,17 +5,17 @@ import {
   IRoles,
   IUserDocument,
   IUserPreferences,
+  IUsers,
 } from "./user.interface";
 import jwt from "../../utils/authentication/jwt.createtoken";
 import Logging from "../../library/logging";
 import { Secret } from "jsonwebtoken";
 import hashPass from "../../utils/hashPass";
-import mongoose from "mongoose";
-import { getSignedUrl } from "@aws-sdk/cloudfront-signer";
 import { deleteAviIMG, retrieveIMG } from "../../utils/ImageServices/user.Img";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
 import { validateAndUseSignupCode } from "../signupCode/signupCode.service";
-import { validateEnv } from "../../../config/validateEnv";
+import { use } from "passport";
+import { parseAllowedStates } from "../../utils/parseStates/allowedStates";
 
 const getUserUsername = async (username: string) => {
   try {
@@ -49,13 +49,17 @@ const refreshTokenUser = async (token: string, userId: string) => {
 
     if (foundUser.refreshToken !== token) throw new Error("Invalid token");
 
-    const [newToken, freshToken]: Secret[] = jwt.CreateToken(
-      foundUser._id.toString()
-    );
+    const [newToken, freshToken]: Secret[] = jwt.CreateToken({
+      _id: foundUser._id,
+      role: IRoles.USER,
+      username: foundUser.auth.username,
+      email: foundUser.auth.email,
+    });
 
     if (!newToken) throw new Error("Token is not created");
     if (!freshToken) throw new Error("Refresh token is not created");
-
+    Logging.log(`newToken ${newToken}`);
+    Logging.log(`freshToken ${freshToken}`);
     const updatedUser = await User.findByIdAndUpdate(
       { _id: foundUser._id },
       {
@@ -73,7 +77,7 @@ const refreshTokenUser = async (token: string, userId: string) => {
 
     if (!updatedUser) throw new Error("User not found");
 
-    return { newToken, freshToken };
+    return [newToken, freshToken];
   } catch (err) {
     Logging.error(err);
     throw err; // Re-throw the error so the controller can handle it
@@ -94,9 +98,14 @@ export const requestPassword = async (userData: {
 
     let refreshToken = user.refreshToken;
     if (!refreshToken) {
-      const [, freshToken]: Secret[] = jwt.CreateToken(user._id.toString());
+      const [, freshToken]: Secret[] = jwt.CreateToken({
+        _id: user._id,
+        role: IRoles.USER,
+        username: user.auth.username,
+        email: user.auth.email,
+      });
       if (!freshToken) throw new Error("Failed to generate refresh token");
-      
+
       await User.findByIdAndUpdate(
         { _id: user._id },
         { $set: { refreshToken: freshToken } }
@@ -108,10 +117,7 @@ export const requestPassword = async (userData: {
     const { default: EmailService } = await import(
       "../../utils/email/email.service"
     );
-    await EmailService.sendPasswordRequestEmail(
-      user.auth.email,
-      refreshToken
-    );
+    await EmailService.sendPasswordRequestEmail(user.auth.email, refreshToken);
 
     return;
   } catch (err: any) {
@@ -120,54 +126,48 @@ export const requestPassword = async (userData: {
   }
 };
 
-const registerUser = async (userData: any) => {
+const registerUser = async (userData: Partial<IUsers>) => {
   try {
-    const { auth, signupCode, state, ...userProfile } = userData;
-
-    const parseAllowedStates = (): string[] => {
-      const raw = validateEnv.ALLOWED_STATES || "";
-      return raw
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .filter((s) => !!s);
-    };
-
-    const allowedStates = parseAllowedStates();
-    const isFromAllowedState = allowedStates.includes(state.trim().toLowerCase());
-    
-    // Case 1: State allowed → signupCode optional, but if provided must be valid
-    if (isFromAllowedState) {
-      if (signupCode) {
-        const isValidCode = await validateAndUseSignupCode(signupCode);
-        if (!isValidCode) {
-          throw new Error("Invalid signup code or code has reached maximum usage limit");
-        }
-      }
-    // Case 2: State NOT allowed → valid signupCode is required to register
-    } else {
-      if (!signupCode) {
-        throw new Error("Service not available in your state without a valid signup code");
-      }
-      const isValidCode = await validateAndUseSignupCode(signupCode);
-      if (!isValidCode) {
-        throw new Error("Invalid signup code or code has reached maximum usage limit");
-      }
+    // Signup code is required for all registrations
+    if (!userData.signupCode) {
+      throw new Error("Signup code is required for registration");
     }
 
-    const foundUser: IUserDocument = await User.findByUsername(auth.username);
+    const allowedStates = parseAllowedStates();
+    const isFromAllowedState = allowedStates.includes(
+      (userData.state as string).trim().toLowerCase()
+    );
+
+    if (!isFromAllowedState) {
+      throw new Error("Registration not available in your state");
+    }
+
+    // Validate and use signup code
+    const isValidCode = await validateAndUseSignupCode(userData.signupCode);
+    if (!isValidCode) {
+      throw new Error(
+        "Invalid signup code or code has reached maximum usage limit"
+      );
+    }
+
+    const foundUser: IUserDocument = await User.findByUsername(
+      userData?.auth?.username as string
+    );
     if (foundUser) {
       throw new Error("The given username is already in use");
     }
 
-    const foundEmail = await User.findOne({ "auth.email": auth.email });
+    const foundEmail = await User.findOne({
+      "auth.email": userData?.auth?.email as string,
+    });
     if (foundEmail) {
       throw new Error("The given email is already in use");
     }
 
     const userToCreate = {
-      auth,
-      profile: userProfile.profile,
-      state,
+      auth: userData.auth,
+      profile: userData.profile,
+      state: userData.state,
       isVerified: true,
     };
 
@@ -318,20 +318,19 @@ const deleteUser = async (_id: string) => {
   }
 };
 const updatePassword = async (
-  user: Pick<IUserDocument, "auth">,
-  sessionId: string
+  password: string,
+  _id: string
+  //sessionId: string
 ) => {
   try {
-    Logging.log(user);
-    const { username, password } = user.auth;
-    const foundedUser = await User.findByUsername(username);
+    const foundedUser = await User.findById(_id);
     if (!foundedUser) throw new Error("User is not found");
 
-    hashPass(foundedUser, password);
+    hashPass(foundedUser, password as string);
     return foundedUser.populate({
       path: "auth",
       model: "User",
-      select: "-password -role -refreshToken",
+      select: "-auth.password -role -refreshToken",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -609,7 +608,6 @@ export const getIMG = async (id: string) => {
 
     if (!imgUrl) throw new Error("Image not found");
 
-    
     return imgUrl;
   } catch (err: any) {
     const msg = typeof err === "string" ? err : err?.message || "getIMG failed";

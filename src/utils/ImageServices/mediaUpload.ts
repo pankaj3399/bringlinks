@@ -1,4 +1,9 @@
-import { PutObjectCommand, S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  S3Client,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import crypto from "crypto";
 import Logging from "../../library/logging";
@@ -20,12 +25,16 @@ export const mediaS3 = new S3Client({
   },
 });
 
-const BUCKET_NAME = validateEnv.AWS_AVI_BUCKET_NAME;
+const BUCKET_NAME = validateEnv.AWS_BLU_CHATS_MEDIA;
 
-export const generateMediaFileName = (fileType: MediaType, originalName: string, userId: string): string => {
+export const generateMediaFileName = (
+  fileType: MediaType,
+  originalName: string,
+  userId: string
+): string => {
   const timestamp = Date.now();
   const randomString = crypto.randomBytes(16).toString("hex");
-  const extension = originalName.split('.').pop();
+  const extension = originalName.split(".").pop();
   return `chat-media/${fileType}/${userId}/${timestamp}-${randomString}.${extension}`;
 };
 
@@ -36,7 +45,7 @@ export const uploadMediaFile = async (
 ): Promise<IMediaMessage> => {
   try {
     const fileName = generateMediaFileName(mediaType, file.name, userId);
-    
+
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: fileName,
@@ -55,7 +64,7 @@ export const uploadMediaFile = async (
 
     const mediaMessage: IMediaMessage = {
       type: mediaType,
-      url: signedUrl, 
+      url: signedUrl,
       fileName: file.name,
       fileSize: file.size,
       mimeType: file.mimetype,
@@ -70,7 +79,10 @@ export const uploadMediaFile = async (
   }
 };
 
-export const getMediaSignedUrl = async (s3Key: string, expiresIn: number = 3600): Promise<string> =>{
+export const getMediaSignedUrl = async (
+  s3Key: string,
+  expiresIn: number = 3600
+): Promise<string> => {
   try {
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
@@ -101,32 +113,58 @@ export const deleteMediaFile = async (s3Key: string): Promise<void> => {
 };
 
 export const getMediaTypeFromMimeType = (mimeType: string): MediaType => {
-  if (mimeType.startsWith('image/')) {
+  if (mimeType.startsWith("image/")) {
     return MediaType.image;
-  } else if (mimeType.startsWith('audio/')) {
+  } else if (mimeType.startsWith("audio/")) {
     return MediaType.voice;
-  } else if (mimeType.startsWith('video/')) {
+  } else if (mimeType.startsWith("video/")) {
     return MediaType.video;
   } else {
     throw new Error(`Unsupported media type: ${mimeType}`);
   }
 };
 
-export const validateMediaFile = (file: UploadedFile, maxSizeInMB: number = 50): void => {
+export const validateMediaFile = (
+  file: UploadedFile,
+  maxSizeInMB: number = 50
+): void => {
   const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
-  
+
   if (file.size > maxSizeInBytes) {
-    throw new Error(`File size exceeds maximum allowed size of ${maxSizeInMB}MB`);
+    throw new Error(
+      `File size exceeds maximum allowed size of ${maxSizeInMB}MB`
+    );
   }
 
-  const allowedImageTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  const allowedAudioTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a'];
-  const allowedVideoTypes = ['video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/webm'];
+  const allowedImageTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+  const allowedAudioTypes = [
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/wav",
+    "audio/ogg",
+    "audio/m4a",
+  ];
+  const allowedVideoTypes = [
+    "video/mp4",
+    "video/avi",
+    "video/mov",
+    "video/wmv",
+    "video/webm",
+  ];
 
-  const allAllowedTypes = [...allowedImageTypes, ...allowedAudioTypes, ...allowedVideoTypes];
-  
+  const allAllowedTypes = [
+    ...allowedImageTypes,
+    ...allowedAudioTypes,
+    ...allowedVideoTypes,
+  ];
+
   if (!allAllowedTypes.includes(file.mimetype)) {
     throw new Error(`Unsupported file type: ${file.mimetype}`);
   }
 };
-

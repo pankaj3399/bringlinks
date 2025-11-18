@@ -5,16 +5,8 @@ import {
   EventScheduleType,
   RoomPrivacy,
   RoomTypes,
-  TimeSchedule,
 } from "./room.interface";
 import { CurrentLo } from "resources/user/user.interface";
-import {
-  IPaidRooms,
-  PricingTiers,
-  Tickets,
-  Tiers,
-} from "./paidRooms/paidRoom.interface";
-import { start } from "repl";
 
 // Validation for services
 const createRoom = Joi.object().keys({
@@ -59,7 +51,8 @@ const createRoom = Joi.object().keys({
       )
       .required(),
   }),
-  paidRoom: Joi.string<ObjectId>(),
+  paid: Joi.boolean().required(),
+  paidRoom: Joi.string<ObjectId>().optional(),
 });
 
 const editARoom = Joi.object().keys({

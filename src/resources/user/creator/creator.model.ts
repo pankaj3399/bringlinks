@@ -1,5 +1,9 @@
 import mongoose, { model, Schema } from "mongoose";
-import { ICreator, ICreatorDocument, ICreatorModel, StripeAccountStatus } from "./creator.interface";
+import {
+  ICreatorDocument,
+  ICreatorModel,
+  StripeAccountStatus,
+} from "./creator.interface";
 
 const creatorSchema = new Schema<ICreatorDocument>(
   {
@@ -13,13 +17,10 @@ const creatorSchema = new Schema<ICreatorDocument>(
       type: String,
       required: true,
     },
-    portfolio: { type: String },
-    socialMedia: [{ type: String }],
-    experience: { type: String },
     stripeConnectAccountId: {
       type: String,
       unique: true,
-      sparse: true, 
+      sparse: true,
     },
     stripeAccountStatus: {
       type: String,
@@ -27,20 +28,24 @@ const creatorSchema = new Schema<ICreatorDocument>(
       default: StripeAccountStatus.PENDING,
     },
     stripeAccountLink: {
-      type: String, 
+      type: String,
     },
     reviews: [
       {
-        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
         rating: { type: Number, required: true, min: 1, max: 5 },
         comment: { type: String, required: true },
         createdAt: { type: Date, default: Date.now },
       },
     ],
     createdRooms: [{ type: mongoose.Schema.Types.ObjectId, ref: "Rooms" }],
-    userScore: { 
+    userScore: {
       average: { type: Number, default: 0 },
-      count: { type: Number, default: 0 }
+      count: { type: Number, default: 0 },
     },
     totalReviews: { type: Number, default: 0 },
     totalRoomsCreated: { type: Number, default: 0 },
@@ -61,5 +66,8 @@ creatorSchema.statics.findCreatorById = function (_id: string) {
   return this.findById(_id).populate("userId");
 };
 
-const Creator = model<ICreatorDocument, ICreatorModel>("Creator", creatorSchema);
+const Creator = model<ICreatorDocument, ICreatorModel>(
+  "Creator",
+  creatorSchema
+);
 export default Creator;

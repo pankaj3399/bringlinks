@@ -1,6 +1,5 @@
 import { model, Schema } from "mongoose";
 import { Tiers, IPaidRooms } from "./paidRoom.interface";
-import { kMaxLength } from "buffer";
 
 export const PaidRoomSchema = new Schema<IPaidRooms>(
   {

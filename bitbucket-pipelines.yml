@@ -35,11 +35,8 @@ definitions:
         name: Deploy to Staging
         script:
           - echo "Deploying backend to Heroku Staging..."
-          - git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/blu-backend-staging.git
+          - git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/blu-server-staging.git
           - git push heroku HEAD:main -f
-          - echo "Deploying frontend/proxy to Netlify Staging..."
-          - npm install -g netlify-cli
-          - netlify deploy --prod --dir=build --site=$NETLIFY_SITE_ID_STAGING --auth=$NETLIFY_AUTH_TOKEN --message "Staging deploy from Bitbucket"
           
     - step: &deploy-Prod
         name: Deploy to Production
@@ -64,6 +61,6 @@ pipelines:
       - step: *install-dependencies
       - step: *build-project
       - step: *test-project
-      - step: *deploy-Prod
+      # - step: *deploy-Prod
       
       

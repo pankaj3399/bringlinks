@@ -12,7 +12,6 @@ import cookieParser from "cookie-parser";
 import Controller from "./utils/interfaces/controller.interface";
 import { validateEnv } from "../config/validateEnv";
 import {
-  createMessage,
   createMessageWithMedia,
   editMessage,
   deleteMessage,
@@ -55,9 +54,8 @@ class App {
   private initializeMiddleware(): void {
     this.express.use(
       fileUpload({
-        limits: { fileSize: 50 * 1024 * 1024 },
-        useTempFiles: true,
-        tempFileDir: require("os").tmpdir(),
+        limits: { fileSize: 300 * 1024 * 1024 },
+        useTempFiles: false,
         abortOnLimit: true,
       })
     );

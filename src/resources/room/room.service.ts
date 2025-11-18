@@ -1,5 +1,5 @@
 import mongoose, { Error } from "mongoose";
-import { IRoles, IUserDocument, IUserPreferences } from "resources/user/user.interface";
+import { GenderType, Race } from "../../resources/user/user.interface";
 import User from "../user/user.model";
 import Logging from "../../library/logging";
 import {
@@ -12,12 +12,9 @@ import {
 import Rooms from "./room.model";
 import { retrieveRoomIMG } from "../../utils/ImageServices/roomFlyer.Img";
 import { FileType } from "../../utils/ImageServices/helperFunc.ts/room.Img";
-import PaidRoom from "./paidRooms/paidRoom.model";
-import { IPaidRooms, PricingTiers } from "./paidRooms/paidRoom.interface";
-import { str } from "envalid";
+import { IPaidRooms } from "./paidRooms/paidRoom.interface";
 import QRCode from "qrcode";
 import { validateEnv } from "../../../config/validateEnv";
-
 
 const getARoom = async (id: string) => {
   try {
@@ -31,13 +28,13 @@ const getARoom = async (id: string) => {
         {
           path: "created_user",
           model: "User",
-          select: "_id username profile.name"
+          select: "_id auth.username profile.firstName profile.avi followers",
         },
         {
           path: "shares",
           model: "Share",
-          select: "platform shareType shareUrl analytics createdAt"
-        }
+          select: "platform shareType shareUrl analytics createdAt",
+        },
       ])
       .lean()
       .exec();
@@ -105,13 +102,268 @@ const getAllRooms = async () => {
       {
         path: "shares",
         model: "Share",
-        select: "platform shareType shareUrl analytics createdAt"
-      }
+        select: "platform shareType shareUrl analytics createdAt",
+      },
     ]);
 
     if (!allRooms) throw new Error("Room not found");
 
     return allRooms;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+export const getRoomDemographics = async (roomId: string) => {
+  try {
+    // Validate input
+    if (!roomId || typeof roomId !== "string" || roomId.trim() === "") {
+      Logging.error("Invalid roomId provided to getRoomDemographics");
+      throw new Error("Invalid room ID");
+    }
+
+    const room = await Rooms.findById(roomId);
+    if (!room) throw new Error("Room not found");
+
+    // Handle empty entered_id array
+    if (
+      !room.entered_id ||
+      !Array.isArray(room.entered_id) ||
+      room.entered_id.length === 0
+    ) {
+      return {
+        totalEnteredUsers: 0,
+        totalUsersWithData: 0,
+        ageDistribution: {
+          "18-25": 0,
+          "26-35": 0,
+          "36-45": 0,
+          "46-55": 0,
+          "56-65": 0,
+          "65+": 0,
+          unknown: 0,
+        },
+        genderDistribution: {
+          Male: 0,
+          Female: 0,
+          Transgender: 0,
+          NonBinary: 0,
+          NoAnswer: 0,
+          unknown: 0,
+        },
+        raceDistribution: {
+          BLACK: 0,
+          LATINO: 0,
+          WHITE: 0,
+          ASIAN: 0,
+          "NATIVE AMERICAN": 0,
+          "PACIFIC ISLANDER": 0,
+          "TWO OR MORE": 0,
+          NoAnswer: 0,
+          unknown: 0,
+        },
+        occupationDistribution: {},
+        roomInfo: {
+          roomId: room._id || roomId,
+          roomName: room.event_name || "Unknown Room",
+          eventType: room.event_type || "Unknown Type",
+        },
+      };
+    }
+
+    // Get all entered users with their demographics
+    let enteredUsers = await User.find({
+      _id: { $in: room.entered_id },
+    }).select("profile.demographic profile.occupation");
+
+    // Initialize counters
+    const ageGroups = {
+      "18-25": 0,
+      "26-35": 0,
+      "36-45": 0,
+      "46-55": 0,
+      "56-65": 0,
+      "65+": 0,
+      unknown: 0,
+    };
+
+    const genderCount = {
+      Male: 0,
+      Female: 0,
+      Transgender: 0,
+      NonBinary: 0,
+      NoAnswer: 0,
+      unknown: 0,
+    };
+
+    const raceCount = {
+      BLACK: 0,
+      LATINO: 0,
+      WHITE: 0,
+      ASIAN: 0,
+      "NATIVE AMERICAN": 0,
+      "PACIFIC ISLANDER": 0,
+      "TWO OR MORE": 0,
+      NoAnswer: 0,
+      unknown: 0,
+    };
+
+    const occupationCount: { [key: string]: number } = {};
+
+    // Handle null/undefined enteredUsers
+    if (!enteredUsers || !Array.isArray(enteredUsers)) {
+      Logging.log("No entered users found for room demographics");
+      enteredUsers = [];
+    }
+
+    // Process each user's demographics
+    enteredUsers.forEach((user) => {
+      // Skip null/undefined users
+      if (!user) {
+        Logging.log("Null user encountered in demographics processing");
+        return;
+      }
+
+      const demographic = user.profile?.demographic;
+      const occupation = user.profile?.occupation;
+
+      // Age processing with validation
+      try {
+        if (demographic?.age !== null && demographic?.age !== undefined) {
+          const age = Number(demographic.age);
+          if (!isNaN(age) && age > 0 && age < 150) {
+            // Reasonable age validation
+            if (age >= 18 && age <= 25) ageGroups["18-25"]++;
+            else if (age >= 26 && age <= 35) ageGroups["26-35"]++;
+            else if (age >= 36 && age <= 45) ageGroups["36-45"]++;
+            else if (age >= 46 && age <= 55) ageGroups["46-55"]++;
+            else if (age >= 56 && age <= 65) ageGroups["56-65"]++;
+            else if (age > 65) ageGroups["65+"]++;
+            else ageGroups["unknown"]++;
+          } else {
+            ageGroups["unknown"]++;
+          }
+        } else {
+          ageGroups["unknown"]++;
+        }
+      } catch (error) {
+        Logging.error(`Error processing age for user: ${error}`);
+        ageGroups["unknown"]++;
+      }
+
+      // Gender processing with validation
+      try {
+        if (demographic?.gender !== null && demographic?.gender !== undefined) {
+          const genderValue = String(demographic.gender).trim();
+
+          // Check if it's already a string (like "Male", "Female", etc.)
+          if (genderValue in genderCount) {
+            (genderCount as any)[genderValue]++;
+          } else {
+            // Try to parse as numeric index
+            const genderIndex = Number(demographic.gender);
+            if (!isNaN(genderIndex) && genderIndex >= 0) {
+              const genderKeys = Object.keys(GenderType);
+              if (genderIndex < genderKeys.length) {
+                const genderKey = genderKeys[genderIndex];
+                if (genderKey && genderKey in genderCount) {
+                  (genderCount as any)[genderKey]++;
+                } else {
+                  genderCount["unknown"]++;
+                }
+              } else {
+                genderCount["unknown"]++;
+              }
+            } else {
+              genderCount["unknown"]++;
+            }
+          }
+        } else {
+          genderCount["unknown"]++;
+        }
+      } catch (error) {
+        Logging.error(`Error processing gender for user: ${error}`);
+        genderCount["unknown"]++;
+      }
+
+      // Race processing with validation
+      try {
+        if (demographic?.race !== null && demographic?.race !== undefined) {
+          const raceValue = String(demographic.race).trim();
+
+          // Check if it's already a string (like "BLACK", "WHITE", etc.)
+          if (raceValue in raceCount) {
+            (raceCount as any)[raceValue]++;
+          } else {
+            // Try to parse as numeric index
+            const raceIndex = Number(demographic.race);
+            if (!isNaN(raceIndex) && raceIndex >= 0) {
+              const raceKeys = Object.keys(Race);
+              if (raceIndex < raceKeys.length) {
+                const raceKey = raceKeys[raceIndex];
+                if (raceKey && raceKey in raceCount) {
+                  (raceCount as any)[raceKey]++;
+                } else {
+                  raceCount["unknown"]++;
+                }
+              } else {
+                raceCount["unknown"]++;
+              }
+            } else {
+              raceCount["unknown"]++;
+            }
+          }
+        } else {
+          raceCount["unknown"]++;
+        }
+      } catch (error) {
+        Logging.error(`Error processing race for user: ${error}`);
+        raceCount["unknown"]++;
+      }
+
+      // Occupation processing with validation
+      try {
+        if (
+          occupation &&
+          typeof occupation === "string" &&
+          occupation.trim() !== ""
+        ) {
+          const occupationKey = occupation.trim();
+          if (occupationKey.length > 0 && occupationKey.length <= 100) {
+            // Reasonable length check
+            occupationCount[occupationKey] =
+              (occupationCount[occupationKey] || 0) + 1;
+          }
+        }
+      } catch (error) {
+        Logging.error(`Error processing occupation for user: ${error}`);
+      }
+    });
+
+    // Sort occupations by count (descending)
+    const sortedOccupations = Object.entries(occupationCount)
+      .sort(([, a], [, b]) => b - a)
+      .reduce((obj, [key, value]) => {
+        obj[key] = value;
+        return obj;
+      }, {} as { [key: string]: number });
+
+    // Build demographics object with safe fallbacks
+    const demographics = {
+      totalEnteredUsers: room.entered_id?.length || 0,
+      totalUsersWithData: enteredUsers?.length || 0,
+      ageDistribution: ageGroups,
+      genderDistribution: genderCount,
+      raceDistribution: raceCount,
+      occupationDistribution: sortedOccupations,
+      roomInfo: {
+        roomId: room._id || roomId,
+        roomName: room.event_name || "Unknown Room",
+        eventType: room.event_type || "Unknown Type",
+      },
+    };
+
+    return demographics;
   } catch (err: any) {
     Logging.error(err);
     throw err;
@@ -157,7 +409,9 @@ const createRoom = async (
       if (!v) return undefined;
       const s = String(v).trim();
       // Accept DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
-      const m = s.match(/^([0]?[1-9]|[1|2][0-9]|3[0|1])[./-]([0]?[1-9]|1[0-2])[./-]([0-9]{4}|[0-9]{2})$/);
+      const m = s.match(
+        /^([0]?[1-9]|[1|2][0-9]|3[0|1])[./-]([0]?[1-9]|1[0-2])[./-]([0-9]{4}|[0-9]{2})$/
+      );
       if (m) {
         const d = parseInt(m[1], 10);
         const mo = parseInt(m[2], 10) - 1; // zero-based
@@ -174,7 +428,9 @@ const createRoom = async (
       event_admin: toObjectIdArray((room as any).event_admin),
       event_invitees: toObjectIdArray((room as any).event_invitees),
       event_schedule: {
-        startDate: parseDdmmyyyy((room as any).event_schedule?.startDate) as any,
+        startDate: parseDdmmyyyy(
+          (room as any).event_schedule?.startDate
+        ) as any,
         endDate: parseDdmmyyyy((room as any).event_schedule?.endDate) as any,
       } as any,
     };
@@ -187,7 +443,7 @@ const createRoom = async (
       { _id: createdRoom._id },
       {
         $set: { created_user: created_user },
-        $addToSet: { entered_id: created_user, event_admin: created_user }
+        $addToSet: { entered_id: created_user, event_admin: created_user },
       }
     ).clone();
 
@@ -253,7 +509,9 @@ const createPurchaseQRCode = async (roomId: string, tierName: string) => {
     const room = await Rooms.findById(roomId);
     if (!room) throw new Error("Room not found");
 
-    const purchaseUrl = `${validateEnv.FRONTEND_URL}/purchase/${roomId}?tier=${encodeURIComponent(tierName)}`;
+    const purchaseUrl = `${
+      validateEnv.FRONTEND_URL
+    }/purchase/${roomId}?tier=${encodeURIComponent(tierName)}`;
 
     const qrCode = await QRCode.toDataURL(purchaseUrl);
     if (!qrCode) throw new Error("Purchase QR code not created");
@@ -265,7 +523,11 @@ const createPurchaseQRCode = async (roomId: string, tierName: string) => {
   }
 };
 
-const createEntryQRCode = async (roomId: string, userId: string, ticketId?: string) => {
+const createEntryQRCode = async (
+  roomId: string,
+  userId: string,
+  ticketId?: string
+) => {
   try {
     const room = await Rooms.findById(roomId);
     if (!room) throw new Error("Room not found");
@@ -365,8 +627,11 @@ export const getRelatedRooms = async (user_id: string) => {
     const orConditions: Record<string, any>[] = [];
 
     // Add conditions based on user preferences if they exist
-    if (userPreferences?.favoriteTypesOfRooms && userPreferences.favoriteTypesOfRooms.length > 0) {
-      userPreferences.favoriteTypesOfRooms.forEach(pref => {
+    if (
+      userPreferences?.favoriteTypesOfRooms &&
+      userPreferences.favoriteTypesOfRooms.length > 0
+    ) {
+      userPreferences.favoriteTypesOfRooms.forEach((pref) => {
         if (pref.title) {
           orConditions.push(
             { event_typeOther: pref.title },
@@ -375,17 +640,20 @@ export const getRelatedRooms = async (user_id: string) => {
         }
         if (pref.name) {
           orConditions.push({
-            event_description: pref.name
+            event_description: pref.name,
           });
         }
       });
     }
 
-    if (userPreferences?.favoriteCityState && userPreferences.favoriteCityState.length > 0) {
-      userPreferences.favoriteCityState.forEach(cityPref => {
+    if (
+      userPreferences?.favoriteCityState &&
+      userPreferences.favoriteCityState.length > 0
+    ) {
+      userPreferences.favoriteCityState.forEach((cityPref) => {
         if (cityPref.formatedAddress) {
           orConditions.push({
-            "event_location_address.city_state": cityPref.formatedAddress
+            "event_location_address.city_state": cityPref.formatedAddress,
           });
         }
       });
@@ -394,7 +662,9 @@ export const getRelatedRooms = async (user_id: string) => {
     // If no conditions are available, return all rooms (fallback)
     const query = orConditions.length > 0 ? { $or: orConditions } : {};
 
-    const foundedRooms = await Rooms.find(query).select("-event_location_address -event_location ");
+    const foundedRooms = await Rooms.find(query).select(
+      "-event_location_address -event_location "
+    );
 
     if (!foundedRooms) throw new Error("Room not found");
 
@@ -517,6 +787,7 @@ const removeAnAdmin = async (user_id: string, room_id: string) => {
     throw err;
   }
 };
+//invitation by a user to a room
 const inviteAUser = async (room_id: string, inviteeId: string) => {
   try {
     const invitee_Id = inviteeId as string;
@@ -695,7 +966,7 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
       throw new Error("current location is needed");
 
     const nearbyRooms = await Rooms.find({
-      //uncomment if you want to only show more than 4 weeks old rooms 
+      //uncomment if you want to only show more than 4 weeks old rooms
       // Rooms that are no more than 4 weeks old
       // event_schedule: {
       //   endDate: {
@@ -724,6 +995,7 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
     throw err;
   }
 };
+//
 export const incomingInvite = async (user_id: string, room_id: string) => {
   try {
     const userId = user_id as string;
@@ -748,7 +1020,7 @@ export const incomingInvite = async (user_id: string, room_id: string) => {
     throw err.message;
   }
 };
-export const getIMG = async (id: string, fileType?: FileType) => {
+export const getIMG = async (id: string, fileType?: Partial<FileType>) => {
   try {
     const _id = id as string;
     const foundRoom = await Rooms.findOne({ _id })
@@ -756,14 +1028,16 @@ export const getIMG = async (id: string, fileType?: FileType) => {
       .catch((err) => {
         throw err;
       });
-    if (!foundRoom) throw new Error("user not found");
 
+    if (!foundRoom) throw new Error("user not found");
+    Logging.log(`from getIMG for ${fileType}`);
     if (fileType === FileType.flyer) {
-      Logging.log(foundRoom.event_flyer_img.name);
+      Logging.log(`from getIMG for flyer ${foundRoom.event_flyer_img.name}`);
       const imgUrl: string = await retrieveRoomIMG(
         foundRoom.event_flyer_img.name
       ).catch((err) => {
         Logging.error(err);
+        1;
         throw err;
       });
       Logging.log(imgUrl);
