@@ -16,6 +16,18 @@ class RedisClientMiddleware {
     } else {
       this._redisClient = createClient({ url: redisUrlTest });
     }
+
+    // Connect to Redis
+    this._redisClient.connect().then(() => {
+      Logging.info("Redis client connected successfully");
+    }).catch((error) => {
+      Logging.error(`Redis connection error: ${error}`);
+    });
+
+    // Handle Redis errors
+    this._redisClient.on("error", (error) => {
+      Logging.error(`Redis client error: ${error}`);
+    });
   }
 }
 
