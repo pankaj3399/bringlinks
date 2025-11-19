@@ -19,6 +19,7 @@ import validate from "./wallet.validation";
 import Logging from "../../library/logging";
 import HttpException from "../../middleware/exceptions/http.exception";
 import validationMiddleware from "../../middleware/val.middleware";
+import { invalidateCache, advancedCacheMiddleware } from "../../middleware/cache.middleware";
 
 class WalletController implements Controller {
   public path = "/wallet";
@@ -35,6 +36,10 @@ class WalletController implements Controller {
       RequiredWalletAuth,
       isUserAccount,
       walletPermissions,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:wallet:${req.params.userId}:${req.params.walletId}`,
+        ttl: 1800
+      }),
       this.getWalletById
     );
     this.router.post(
@@ -51,6 +56,7 @@ class WalletController implements Controller {
       isUserAccount,
       walletPermissions,
       validationMiddleware(validate.updateWallet),
+      invalidateCache('wallet', 'walletId'),
       this.updateWallet
     );
     this.router.delete(
@@ -59,6 +65,7 @@ class WalletController implements Controller {
       RequiredWalletAuth,
       isUserAccount,
       walletPermissions,
+      invalidateCache('wallet', 'walletId'),
       this.deleteWallet
     );
   }

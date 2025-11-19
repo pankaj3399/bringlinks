@@ -50,6 +50,7 @@ import {
   validateMediaFile,
 } from "../../utils/ImageServices/postImages";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
+import { invalidateCache, advancedCacheMiddleware } from "../../middleware/cache.middleware";
 
 class PostController implements Controller {
   public path = "/posts";
@@ -59,18 +60,29 @@ class PostController implements Controller {
     this.initializeRoutes();
   }
   private initializeRoutes(): void {
-    this.router.get(`${this.path}/:postId/share-links`, this.getPostShareLinks);
+    this.router.get(`${this.path}/:postId/share-links`, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:post:shareLinks:${req.params.postId}`,
+      ttl: 3600
+    }), this.getPostShareLinks);
     this.router.put(
       `${this.path}/:postId/stats`,
       validationMiddleware(validate.updatePostStats),
       RequiredAuth,
+      invalidateCache('post', 'postId'),
       this.updatePostStats
     );
-    this.router.get(`${this.path}/:postId/stats/viewer`, this.addPostViewStats);
+    this.router.get(`${this.path}/:postId/stats/viewer`, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:post:stats:${req.params.postId}`,
+      ttl: 600
+    }), this.addPostViewStats);
     this.router.post(`${this.path}/:postId/share`, this.trackPostShare);
     this.router.get(
       `${this.path}/:postId/share-analytics`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:shareAnalytics:${req.params.postId}`,
+        ttl: 1800
+      }),
       this.getPostShareAnalytics
     );
     this.router.get(
@@ -86,13 +98,21 @@ class PostController implements Controller {
     this.router.get(
       `${this.path}/nearpost/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:nearpost:${req.params.userId}:${JSON.stringify(req.query)}`,
+        ttl: 300
+      }),
       this.getNearPost
     );
-    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, this.getPost);
+    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:post:${req.params.userid}:${req.params.postid}`,
+      ttl: 1800
+    }), this.getPost);
     this.router.delete(
       `${this.path}/deletepost/:userid/:postid`,
       RequiredAuth,
       postPermissions,
+      invalidateCache('post', 'postid'),
       this.deletePost
     );
     this.router.patch(
@@ -100,13 +120,15 @@ class PostController implements Controller {
       validationMiddleware(validate.updatePost),
       RequiredAuth,
       postPermissions,
+      invalidateCache('post', 'postid'),
       this.editPost
     );
-    this.router.post(`${this.path}/like/:userid/:postid`, this.likeAPost);
+    this.router.post(`${this.path}/like/:userid/:postid`, invalidateCache('post', 'postid'), this.likeAPost);
     this.router.post(
       `${this.path}/unliked/:userid/:postid/:likeid`,
       RequiredAuth,
       likePermissions,
+      invalidateCache('post', 'postid'),
       this.unLikeAPost
     );
     this.router.get(
@@ -123,6 +145,7 @@ class PostController implements Controller {
       `${this.path}/comment/:userid/:postid`,
       RequiredAuth,
       validationMiddleware(commentValidate.createComment),
+      invalidateCache('post', 'postid'),
       this.comment
     );
     this.router.post(
@@ -136,17 +159,20 @@ class PostController implements Controller {
       RequiredAuth,
       validationMiddleware(commentValidate.updateComment),
       commentPermissions,
+      invalidateCache('post', 'postid'),
       this.editAComment
     );
     this.router.delete(
       `${this.path}/comment/:userid/:postid/:commentid`,
       RequiredAuth,
       commentPermissions,
+      invalidateCache('post', 'postid'),
       this.deleteAComment
     );
     this.router.post(
       `${this.path}/upload-image/:userid/:postid`,
       RequiredAuth,
+      invalidateCache('post', 'postid'),
       this.uploadPostMedia
     );
     this.router.get(
@@ -157,21 +183,37 @@ class PostController implements Controller {
     this.router.get(
       `${this.path}/images/user/:userid`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:images:user:${req.params.userid}`,
+        ttl: 1800
+      }),
       this.retrieveUserPostMedia
     );
     this.router.get(
       `${this.path}/images/retrieve/:userid`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:images:nearby:${req.params.userid}`,
+        ttl: 1200
+      }),
       this.retrieveNearbyPostMedia
     );
     this.router.get(
       `${this.path}/images/room/:roomid/:userid`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:images:room:${req.params.roomid}:${req.params.userid}`,
+        ttl: 1800
+      }),
       this.retrieveRoomPostMedia
     );
     this.router.get(
       `${this.path}/images/retrieve/room/:userid`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:post:images:nearbyroom:${req.params.userid}`,
+        ttl: 1200
+      }),
       this.retrieveNearbyRoomPostMedia
     );
   }

@@ -18,6 +18,7 @@ import {
 } from "./creator.service";
 import validationMiddleware from "../../../middleware/val.middleware";
 import validate from "./creator.validation";
+import { invalidateCache, advancedCacheMiddleware } from "../../../middleware/cache.middleware";
 
 class CreatorController implements Controller {
   public path = "/creator";
@@ -46,12 +47,20 @@ class CreatorController implements Controller {
       `${this.path}/profile/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:profile:${req.params.userId}`,
+        ttl: 1800
+      }),
       this.getCreatorProfileByUserId
     );
 
     this.router.get(
       `${this.path}/profile/:creatorId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:reviews:${req.params.creatorId}`,
+        ttl: 1800
+      }),
       this.getCreatorReviews
     );
 
@@ -59,6 +68,7 @@ class CreatorController implements Controller {
       `${this.path}/profile/:creatorId`,
       RequiredAuth,
       isUserAccount,
+      invalidateCache('creator', 'creatorId'),
       this.updateCreatorProfile
     );
 
@@ -66,6 +76,10 @@ class CreatorController implements Controller {
       `${this.path}/can-create-paid-rooms/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:cancreatepaidrooms:${req.params.userId}`,
+        ttl: 1800
+      }),
       this.checkPaidRoomEligibility
     );
 
@@ -73,6 +87,10 @@ class CreatorController implements Controller {
       `${this.path}/earnings/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:earnings:${req.params.userId}`,
+        ttl: 600
+      }),
       this.getCreatorEarnings
     );
 
@@ -87,6 +105,10 @@ class CreatorController implements Controller {
       `${this.path}/stripe-connect/status/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:stripe:status:${req.params.userId}`,
+        ttl: 3600
+      }),
       this.getStripeConnectStatus
     );
 

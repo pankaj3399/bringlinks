@@ -14,6 +14,7 @@ import validate from "./signupCode.validation";
 import { RequiredAuth, AuthorizeRole } from "../../middleware/auth.middleware";
 import { IRoles } from "../user/user.interface";
 import Logging from "../../library/logging";
+import { invalidateCache, advancedCacheMiddleware } from "../../middleware/cache.middleware";
 
 class SignupCodeController implements Controller {
   public path = "/signup-codes";
@@ -48,6 +49,10 @@ class SignupCodeController implements Controller {
       `${this.path}/my-codes`,
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:signupcode:mycodes:${req.user?._id}`,
+        ttl: 1800
+      }),
       this.getMySignupCodes
     );
 
@@ -55,6 +60,10 @@ class SignupCodeController implements Controller {
       `${this.path}/all`,
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:signupcode:all`,
+        ttl: 1800
+      }),
       this.getAllActiveCodes
     );
 
@@ -63,6 +72,7 @@ class SignupCodeController implements Controller {
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
       validationMiddleware(validate.updateCode),
+      invalidateCache('signupcode', 'codeId'),
       this.updateCode
     );
 
@@ -70,6 +80,7 @@ class SignupCodeController implements Controller {
       `${this.path}/:codeId`,
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
+      invalidateCache('signupcode', 'codeId'),
       this.deactivateCode
     );
   }

@@ -12,6 +12,7 @@ import {
 import { roomAdminPermissions } from "../../../middleware/authorization.middleware";
 import validate from "./itinerary.validation";
 import validationMiddleware from "../../../middleware/val.middleware";
+import { invalidateCache, advancedCacheMiddleware } from "../../../middleware/cache.middleware";
 
 class ItineraryController implements Controller {
   public path = "/itinerary";
@@ -25,6 +26,10 @@ class ItineraryController implements Controller {
     this.router.get(
       `${this.path}/:userId/:roomId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:itinerary:${req.params.userId}:${req.params.roomId}`,
+        ttl: 1800
+      }),
       this.getItinerary
     );
     this.router.post(
@@ -32,12 +37,14 @@ class ItineraryController implements Controller {
       RequiredAuth,
       roomAdminPermissions,
       validationMiddleware(validate.createItinerary),
+      invalidateCache('itinerary', 'roomId'),
       this.createItinerary
     );
     this.router.delete(
       `${this.path}/:userId/:roomId`,
       RequiredAuth,
       roomAdminPermissions,
+      invalidateCache('itinerary', 'roomId'),
       this.deleteItinerary
     );
     this.router.patch(
@@ -45,6 +52,7 @@ class ItineraryController implements Controller {
       RequiredAuth,
       roomAdminPermissions,
       validationMiddleware(validate.updateItinerary),
+      invalidateCache('itinerary', 'roomId'),
       this.updateItinerary
     );
   }

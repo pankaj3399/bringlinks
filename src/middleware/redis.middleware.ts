@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 import { validateEnv } from "../../config/validateEnv";
+import Logging from "library/logging";
 
 class RedisClientMiddleware {
   public _redisClient: RedisClientType;

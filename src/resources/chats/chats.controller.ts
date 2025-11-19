@@ -39,6 +39,7 @@ import {
   validateMediaFile,
   MediaType,
 } from "../../utils/ImageServices/mediaUpload";
+import { invalidateCache, advancedCacheMiddleware } from "../../middleware/cache.middleware";
 
 class ChatController implements Controller {
   public path = "/chat";
@@ -52,29 +53,43 @@ class ChatController implements Controller {
     this.router.get(
       `${this.path}/history/:chatType/:targetId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:chat:history:${req.params.chatType}:${req.params.targetId}`,
+        ttl: 600
+      }),
       this.getChatHistoryWithMedia
     );
 
     this.router.post(`${this.path}/group`, RequiredAuth, this.createGroup);
-    this.router.get(`${this.path}/group/:groupId`, RequiredAuth, this.getGroup);
+    this.router.get(`${this.path}/group/:groupId`, RequiredAuth, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:chat:group:${req.params.groupId}`,
+      ttl: 1800
+    }), this.getGroup);
     this.router.get(
       `${this.path}/groups/user/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:chat:usergroups:${req.params.userId}`,
+        ttl: 1200
+      }),
       this.getUserGroups
     );
     this.router.put(
       `${this.path}/group/:groupId`,
       RequiredAuth,
+      invalidateCache('chat', 'groupId'),
       this.updateGroup
     );
     this.router.post(
       `${this.path}/group/:groupId/member`,
       RequiredAuth,
+      invalidateCache('chat', 'groupId'),
       this.addMember
     );
     this.router.delete(
       `${this.path}/group/:groupId/member/:userId`,
       RequiredAuth,
+      invalidateCache('chat', 'groupId'),
       this.removeMember
     );
 

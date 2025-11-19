@@ -25,6 +25,7 @@ import Rooms from "../room.model";
 import Creator from "../../user/creator/creator.model";
 import StripeService from "../../../utils/stripe/stripe.service";
 import { createRoomQRCode } from "../room.service";
+import { invalidateCache, advancedCacheMiddleware } from "../../../middleware/cache.middleware";
 
 class PaidRoomController implements Controller {
   public path = "/purchase";
@@ -51,12 +52,20 @@ class PaidRoomController implements Controller {
       `/creator/:userId/stripe/login-link`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:stripe:loginlink:${req.params.userId}`,
+        ttl: 3600
+      }),
       this.getCreatorStripeLoginLink
     );
     this.router.get(
       `/creator/:userId/stripe/balance`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:creator:stripe:balance:${req.params.userId}`,
+        ttl: 600
+      }),
       this.getCreatorStripeBalance
     );
     this.router.post(
@@ -76,6 +85,7 @@ class PaidRoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('paidroom', 'roomId'),
       this.updatePaidRoom
     );
     this.router.post(
@@ -83,6 +93,7 @@ class PaidRoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('paidroom', 'roomId'),
       this.addTickets
     );
     this.router.get(
@@ -91,6 +102,10 @@ class PaidRoomController implements Controller {
       isUserAccount,
       RequiredPaidRoomEntry,
       roomAdminPermissions,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:paidroom:${req.params.userId}:${req.params.roomId}`,
+        ttl: 1800
+      }),
       this.getPaidRoom
     );
     this.router.post(

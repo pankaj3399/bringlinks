@@ -59,6 +59,7 @@ import fileUpload, { UploadedFile } from "express-fileupload";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { uploadRoomImage } from "../../utils/ImageServices/roomFlyer.Img";
 import mongoose from "mongoose";
+import { invalidateCache, advancedCacheMiddleware } from "../../middleware/cache.middleware";
 var toId = mongoose.Types.ObjectId;
 
 class RoomController implements Controller {
@@ -79,28 +80,48 @@ class RoomController implements Controller {
     this.router.get(
       `${this.path}/findroom/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:findroom:${req.params.userId}`,
+        ttl: 1800
+      }),
       this.getRoomById
     );
     this.router.get(
       `${this.path}/search/description/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:search:${req.params.userId}:${req.query.q}`,
+        ttl: 1200
+      }),
       this.getRoomsByText
     );
     this.router.get(
       `${this.path}/search/related/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:related:${req.params.userId}:${req.query.roomId}`,
+        ttl: 1800
+      }),
       this.getRelatedRooms
     );
     this.router.get(
       `${this.path}/nearby/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:nearby:${req.params.userId}:${JSON.stringify(req.query)}`,
+        ttl: 600
+      }),
       this.getRoomNearby
     );
     this.router.get(
       `${this.path}/nearbypaginated/:userId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:nearbypaginated:${req.params.userId}:${req.query.page}`,
+        ttl: 600
+      }),
       this.getRoomNearbyPaginated
     );
     this.router.post(
@@ -109,15 +130,26 @@ class RoomController implements Controller {
       RequiredAuth,
       this.getRoomBy
     );
-    this.router.get(`${this.path}/allrooms`, RequiredAuth, this.getAllRooms);
+    this.router.get(`${this.path}/allrooms`, RequiredAuth, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:room:allrooms`,
+      ttl: 1800
+    }), this.getAllRooms);
     this.router.get(
       `${this.path}/allroomspaginated`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:allroomspaginated:${req.query.page}`,
+        ttl: 1200
+      }),
       this.getAllRoomsPaginated
     );
     this.router.get(
       `${this.path}/demographics/:userId/:roomId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:demographics:${req.params.userId}:${req.params.roomId}`,
+        ttl: 3600
+      }),
       this.getRoomDemographics
     );
     this.router.delete(
@@ -125,6 +157,7 @@ class RoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.deleteRoom
     );
     this.router.put(
@@ -133,6 +166,7 @@ class RoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.editARoom
     );
     this.router.post(
@@ -140,30 +174,35 @@ class RoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.addAnAdmin
     );
     this.router.post(
       `${this.path}/incominginvite/:userId/:roomId`,
       RequiredAuth,
       enteredRoomPermissions,
+      invalidateCache('room', 'roomId'),
       this.incomingInvite
     );
     this.router.post(
       `${this.path}/inviteuser/:userId/:roomId`,
       RequiredAuth,
       enteredRoomPermissions,
+      invalidateCache('room', 'roomId'),
       this.inviteUser
     );
     this.router.delete(
       `${this.path}/uninvite/:userId/:roomId`,
       RequiredAuth,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.unInviteUser
     );
     this.router.delete(
       `${this.path}/removeanadmin/:userId/:roomId/:adminId`,
       RequiredAuth,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.removeAnAdmin
     );
     this.router.post(
@@ -171,6 +210,7 @@ class RoomController implements Controller {
       RequiredAuth,
       roomAdminPermissions,
       isInvitedPermissions,
+      invalidateCache('room', 'roomId'),
       this.acceptRoomInvite
     );
     this.router.put(
@@ -178,18 +218,24 @@ class RoomController implements Controller {
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
+      invalidateCache('room', 'roomId'),
       this.uploadIMG
     );
     this.router.put(
       `${this.path}/image/media/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
+      invalidateCache('room', 'roomId'),
       this.uploadMediaIMG
     );
     this.router.get(
       `${this.path}/image/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:image:${req.params.userId}:${req.params.roomId}`,
+        ttl: 3600
+      }),
       this.retrieveImg
     );
     this.router.post(
@@ -198,6 +244,7 @@ class RoomController implements Controller {
       isUserAccount,
       roomAdminPermissions,
       validationMiddleware(validate.addSpecialGuest),
+      invalidateCache('room', 'roomId'),
       this.addGuest
     );
     this.router.post(
@@ -206,6 +253,7 @@ class RoomController implements Controller {
       isUserAccount,
       roomAdminPermissions,
       validationMiddleware(validate.addSponsor),
+      invalidateCache('room', 'roomId'),
       this.addSponsor
     );
 
@@ -213,34 +261,60 @@ class RoomController implements Controller {
       `${this.path}/getqrcode/:roomId`,
       RequiredAuth,
       isRoomPrivate,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:qrcode:${req.params.roomId}`,
+        ttl: 3600
+      }),
       this.getRoomQRCode
     );
     this.router.get(
       `${this.path}/purchase-qr/:roomId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:purchaseqr:${req.params.roomId}`,
+        ttl: 3600
+      }),
       this.getPurchaseQRCode
     );
     this.router.get(
       `${this.path}/purchase-qr-public/:roomId`,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:purchaseqrpublic:${req.params.roomId}`,
+        ttl: 3600
+      }),
       this.getPurchaseQRCodePublic
     );
     this.router.get(
       `${this.path}/entry-qr/:roomId/:userId`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:entryqr:${req.params.roomId}:${req.params.userId}`,
+        ttl: 1800
+      }),
       this.getEntryQRCode
     );
-    this.router.get(`${this.path}/:roomId/share-links`, this.getShareLinks);
+    this.router.get(`${this.path}/:roomId/share-links`, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:room:sharelinks:${req.params.roomId}`,
+      ttl: 3600
+    }), this.getShareLinks);
     this.router.post(`${this.path}/:roomId/share`, this.trackShare);
     this.router.get(
       `${this.path}/:roomId/share-analytics`,
       RequiredAuth,
+      advancedCacheMiddleware({
+        keyBuilder: (req) => `cache:room:shareanalytics:${req.params.roomId}`,
+        ttl: 1800
+      }),
       this.getShareAnalytics
     );
     this.router.get(
       `${this.path}/share/:platform/:encodedUrl`,
       this.handleShareClick
     );
-    this.router.get(`${this.path}/:roomId`, this.getRoomByIdPublic);
+    this.router.get(`${this.path}/:roomId`, advancedCacheMiddleware({
+      keyBuilder: (req) => `cache:room:public:${req.params.roomId}`,
+      ttl: 1800
+    }), this.getRoomByIdPublic);
   }
 
   private uploadMediaIMG = async (
