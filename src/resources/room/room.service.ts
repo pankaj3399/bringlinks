@@ -15,6 +15,7 @@ import { FileType } from "../../utils/ImageServices/helperFunc.ts/room.Img";
 import { IPaidRooms } from "./paidRooms/paidRoom.interface";
 import QRCode from "qrcode";
 import { validateEnv } from "../../../config/validateEnv";
+import { createRegex } from "../../utils/ImageServices/helperFunc.ts/mongoose/partialRegex";
 
 const getARoom = async (id: string) => {
   try {
@@ -35,6 +36,11 @@ const getARoom = async (id: string) => {
           model: "Share",
           select: "platform shareType shareUrl analytics createdAt",
         },
+        {
+          path: "paidRoom",
+          model: "PaidRooms",
+          select: "_id tickets.pricing",
+        },
       ])
       .lean()
       .exec();
@@ -54,39 +60,86 @@ const getARoom = async (id: string) => {
 
 const getRoomBy = async (room: IRoomsDocument, path: string) => {
   const _id = room._id as string;
+
   try {
+    const orConditions = [
+      // Exact match for _id (IDs should be exact)
+      _id ? { _id } : null,
+
+      // Partial matches for text fields
+      room.event_name ? { event_name: createRegex(room.event_name) } : null,
+      room.event_type ? { event_type: createRegex(room.event_type) } : null,
+      room.event_description
+        ? { event_description: createRegex(room.event_description) }
+        : null,
+      room.event_typeOther
+        ? { event_typeOther: createRegex(room.event_typeOther) }
+        : null,
+
+      // Partial matches for location fields
+      room.event_location_address?.city
+        ? {
+            "event_location_address.city": createRegex(
+              room.event_location_address.city
+            ),
+          }
+        : null,
+      room.event_location_address?.state
+        ? {
+            "event_location_address.state": createRegex(
+              room.event_location_address.state
+            ),
+          }
+        : null,
+      room.event_location_address?.street_address
+        ? {
+            "event_location_address.street_address": createRegex(
+              room.event_location_address.street_address
+            ),
+          }
+        : null,
+      room.event_location?.venue
+        ? { "event_location.venue": createRegex(room.event_location.venue) }
+        : null,
+
+      // Exact match for numeric/ID fields
+      room.entered_id ? { entered_id: room.entered_id } : null,
+
+      // Date range queries (greater than or equal, less than or equal)
+      room.event_schedule?.startDate
+        ? {
+            "event_schedule.startDate": { $gte: room.event_schedule.startDate },
+          }
+        : null,
+      room.event_schedule?.endDate
+        ? { "event_schedule.endDate": { $lte: room.event_schedule.endDate } }
+        : null,
+    ].filter(Boolean); // Remove null/undefined conditions
+
+    if (orConditions.length === 0) {
+      throw new Error("No valid search criteria provided");
+    }
+
     const foundedRoom = await Rooms.find({
-      $or: [
-        { _id },
-        { event_name: room.event_name },
-        { event_type: room.event_type },
-        { event_typeOther: room.event_typeOther },
-        {
-          "event_location_address.city": room.event_location_address?.city,
-        },
-        {
-          "event_location_address.state": room.event_location_address?.state,
-        },
-        {
-          entered_id: room.entered_id,
-        },
-        {
-          "event_location.venue": room.event_location?.venue,
-        },
-        {
-          "event_schedule.startDate": room.event_schedule?.startDate,
-        },
-        {
-          "event_schedule.endDate": room.event_schedule?.endDate,
-        },
-      ],
+      $or: orConditions as any,
     })
       .clone()
-      .populate(path);
+      .populate([
+        {
+          path: path,
+        },
+        {
+          path: "paidRoom",
+          model: "PaidRooms",
+          select: "tickets.pricing",
+        },
+      ]);
 
     Logging.log(foundedRoom);
 
-    if (!foundedRoom) throw new Error("Room not found");
+    if (!foundedRoom || foundedRoom.length === 0) {
+      throw new Error("Room not found");
+    }
 
     return foundedRoom;
   } catch (err: any) {
@@ -94,7 +147,6 @@ const getRoomBy = async (room: IRoomsDocument, path: string) => {
     throw err;
   }
 };
-
 const getAllRooms = async () => {
   try {
     const allRooms = await Rooms.find().populate([
@@ -103,6 +155,11 @@ const getAllRooms = async () => {
         path: "shares",
         model: "Share",
         select: "platform shareType shareUrl analytics createdAt",
+      },
+      {
+        path: "paidRoom",
+        model: "PaidRooms",
+        select: "_id tickets.pricing",
       },
     ]);
 
@@ -987,7 +1044,18 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
           $maxDistance: radiusPrefMeters,
         },
       },
-    });
+    }).populate([
+      {
+        path: "paidRoom",
+        model: "PaidRooms",
+        select: "tickets.pricing",
+      },
+      {
+        path: "shares",
+        model: "Share",
+        select: "platform shareType shareUrl analytics createdAt",
+      },
+    ]);
 
     return nearbyRooms;
   } catch (err: any) {

@@ -83,6 +83,7 @@ export interface CurrentLo {
   coordinates: [number, number];
   venue: string;
 }
+
 export enum Types {
   Point = "Point",
   Polygon = "Polygon",

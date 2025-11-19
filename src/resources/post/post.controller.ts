@@ -4,13 +4,17 @@ import HttpException from "../../middleware/exceptions/http.exception";
 import Controller from "utils/interfaces/controller.interface";
 import {
   comment,
+  commentReply,
   createAPost,
   deleteAPost,
   deleteComment,
   editComment,
   getAPostById,
+  getCommentsPaginated,
+  getCommentsReplyPaginated,
   getNearbyPosts,
   getNearPost,
+  getNearRoomPost,
   getRoomPost,
   getUserPost,
   getUserPosts,
@@ -105,11 +109,27 @@ class PostController implements Controller {
       likePermissions,
       this.unLikeAPost
     );
+    this.router.get(
+      `${this.path}/comments/paginated/:userid/:postid`,
+      RequiredAuth,
+      this.getCommentsPaginated
+    );
+    this.router.get(
+      `${this.path}/comments/paginated/:userid/:postid/:commentid/reply`,
+      RequiredAuth,
+      this.getCommentsReplyPaginated
+    );
     this.router.post(
       `${this.path}/comment/:userid/:postid`,
-      //RequiredAuth,
+      RequiredAuth,
       validationMiddleware(commentValidate.createComment),
       this.comment
+    );
+    this.router.post(
+      `${this.path}/comment/:userid/:postid/:commentid/reply`,
+      RequiredAuth,
+      validationMiddleware(commentValidate.createComment),
+      this.commentReply
     );
     this.router.patch(
       `${this.path}/editcomment/:userid/:postid/:commentid`,
@@ -128,6 +148,11 @@ class PostController implements Controller {
       `${this.path}/upload-image/:userid/:postid`,
       RequiredAuth,
       this.uploadPostMedia
+    );
+    this.router.get(
+      `${this.path}/user/all/:userid`,
+      RequiredAuth,
+      this.getUserPost
     );
     this.router.get(
       `${this.path}/images/user/:userid`,
@@ -219,7 +244,25 @@ class PostController implements Controller {
       new HttpException(500, err);
     }
   };
+  private getUserPost = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid } = req.params;
+      if (!userid) return res.status(400).json({ message: "Id is required" });
+      Logging.log(`getUserPost: ${userid}`);
+      const foundPost = await getUserPost(userid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
 
+      res.status(200).json(foundPost);
+    } catch (err: any) {
+      Logging.error(err);
+      new HttpException(500, err);
+    }
+  };
   private createAPost = async (
     req: Request,
     res: Response,
@@ -379,6 +422,93 @@ class PostController implements Controller {
       if (!unlikedUser)
         return res.status(400).json({ message: "Post not unliked" });
       res.status(200).json(unlikedUser);
+    } catch (err: any) {
+      Logging.error(err);
+      new HttpException(500, err);
+    }
+  };
+  private commentReply = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid, commentid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+      //check post exist
+      const foundPost = await getAPostById(postid, userid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
+
+      if (!commentid)
+        return res.status(400).json({ message: "Comment id is required" });
+      const comments = await commentReply(userid, commentid, req.body, postid);
+      if (!comments)
+        return res.status(400).json({ message: "Comment not created" });
+
+      res.status(200).json(comments);
+    } catch (err: any) {
+      Logging.error(err);
+      new HttpException(500, err.message);
+    }
+  };
+  private getCommentsReplyPaginated = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid, commentid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const page = Number(req.query.page);
+      const perPage = Number(req.query.perPage);
+
+      if (!perPage)
+        return res.status(400).json({ message: "Per page is required" });
+      if (!page) return res.status(400).json({ message: "Page is required" });
+
+      const comments = await getCommentsReplyPaginated(
+        postid,
+        commentid,
+        page,
+        perPage
+      );
+
+      if (!comments)
+        return res.status(400).json({ message: "Comment not found" });
+
+      res.status(200).json(comments);
+    } catch (err: any) {
+      Logging.error(err);
+      new HttpException(500, err);
+    }
+  };
+  private getCommentsPaginated = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const page = Number(req.query.page);
+      const perPage = Number(req.query.perPage);
+
+      if (!perPage)
+        return res.status(400).json({ message: "Per page is required" });
+      if (!page) return res.status(400).json({ message: "Page is required" });
+
+      const comments = await getCommentsPaginated(postid, page, perPage);
+
+      if (!comments)
+        return res.status(400).json({ message: "Comment not found" });
+
+      res.status(200).json(comments);
     } catch (err: any) {
       Logging.error(err);
       new HttpException(500, err);
@@ -594,10 +724,14 @@ class PostController implements Controller {
 
       if (!userid) return res.status(400).json({ message: "Id is required" });
 
-      const nearbyPosts = await getNearPost(userid, Number(lng), Number(ltd));
+      const nearbyPosts = await getNearRoomPost(
+        userid,
+        Number(lng),
+        Number(ltd)
+      );
       if (!nearbyPosts)
         return res.status(400).json({ message: "Post not found" });
-
+      Logging.info(nearbyPosts);
       const nearbyPostsMedia = await listCheckImageUrl(nearbyPosts);
 
       return res.status(200).json(nearbyPostsMedia);

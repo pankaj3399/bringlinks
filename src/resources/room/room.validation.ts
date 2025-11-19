@@ -131,9 +131,6 @@ const validateRoomFindBy = Joi.object({
     state: Joi.string().optional(),
   }).optional(),
   entered_id: Joi.string().optional(),
-  event_location: Joi.object({
-    category: Joi.string().optional(),
-  }).optional(),
   event_schedule: Joi.object({
     startDate: Joi.string().pattern(
       new RegExp(/^(1[0-2]|0?[1-9]):[0-5][0-9] [APap][Mm]$/)
@@ -142,6 +139,9 @@ const validateRoomFindBy = Joi.object({
       new RegExp(/^(1[0-2]|0?[1-9]):[0-5][0-9] [APap][Mm]$/)
     ),
   }).optional(),
+  event_location: Joi.object({
+    venue: Joi.string().optional(),
+  }),
 }).or(
   "_id",
   "event_name",
@@ -151,7 +151,8 @@ const validateRoomFindBy = Joi.object({
   "entered_id",
   "event_location.category",
   "event_schedule.startDate",
-  "event_schedule.endDate"
+  "event_schedule.endDate",
+  "event_location.venue"
 );
 
 const addSpecialGuest = Joi.object().keys({

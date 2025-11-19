@@ -67,7 +67,8 @@ export const buyTickets = async (
             ? paidRoom.tickets.pricing.reduce((acc: number, curr: any) => {
                 const price = Number(curr?.price ?? 0);
                 const sold = Number(curr?.sold ?? 0);
-                if (!Number.isFinite(price) || !Number.isFinite(sold)) return acc;
+                if (!Number.isFinite(price) || !Number.isFinite(sold))
+                  return acc;
                 return acc + price * sold;
               }, 0)
             : 0,
@@ -228,6 +229,14 @@ export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
 
     if (!paid_Room) throw new Error("Paid room not created");
 
+    //update room
+    const updatedRoom = await Rooms.findByIdAndUpdate(room_Id, {
+      paid: true,
+      paidRoom: paid_Room._id,
+    });
+
+    if (!updatedRoom) throw new Error("Room not updated");
+
     return paid_Room;
   } catch (err) {
     Logging.error(err);
@@ -245,7 +254,7 @@ export const createNewPaidRoom = async (
     maxTickets: number;
     ticketTiers?: Array<{
       name: string;
-      price: number;  
+      price: number;
       quantity: number;
     }>;
     event_type?: string;
@@ -279,13 +288,17 @@ export const createNewPaidRoom = async (
       : now;
     const endDate = roomData.event_schedule?.endDate
       ? new Date(roomData.event_schedule.endDate)
-      : new Date(now.getTime() + 60 * 60 * 1000); 
+      : new Date(now.getTime() + 60 * 60 * 1000);
 
     const eventType = roomData.event_type || "Other";
-    const eventTypeOther = eventType === "Other" ? (roomData.event_typeOther || "Other") : undefined as any;
+    const eventTypeOther =
+      eventType === "Other"
+        ? roomData.event_typeOther || "Other"
+        : (undefined as any);
 
     const eventName = roomData.event_name || roomData.name || "Untitled Room";
-    const eventDescription = roomData.event_description || roomData.description || "Description";
+    const eventDescription =
+      roomData.event_description || roomData.description || "Description";
 
     const coords = roomData.event_location?.coordinates || [0, 0];
     const eventLocation = {
@@ -295,7 +308,8 @@ export const createNewPaidRoom = async (
     } as any;
 
     const eventAddress = {
-      street_address: roomData.event_location_address?.street_address || "123 Test St",
+      street_address:
+        roomData.event_location_address?.street_address || "123 Test St",
       address_line2: roomData.event_location_address?.address_line2 || "",
       city: roomData.event_location_address?.city || "Test City",
       state: roomData.event_location_address?.state || "CA",
@@ -331,35 +345,40 @@ export const createNewPaidRoom = async (
 
     const mapTierNameToEnum = (name: string): string => {
       const normalized = (name || "").toLowerCase();
-      if (normalized.includes("premium") && normalized.includes("vip")) return "Premium Vip";
-      if (normalized.includes("ultimate") && normalized.includes("vip")) return "Ultimate Vip";
+      if (normalized.includes("premium") && normalized.includes("vip"))
+        return "Premium Vip";
+      if (normalized.includes("ultimate") && normalized.includes("vip"))
+        return "Ultimate Vip";
       if (normalized.includes("early")) return "Early Bird";
       if (normalized.includes("last")) return "Last Minute";
       if (normalized.includes("vip")) return "Vip";
       return "General Admission";
     };
 
-    const pricing = (roomData.ticketTiers && roomData.ticketTiers.length > 0)
-      ? roomData.ticketTiers.map((t) => ({
-          tiers: mapTierNameToEnum(t.name),
-          title: t.name || "General Admission",
-          description: t.name || "General Admission",
-          price: t.price,
-          total: t.quantity,
-          available: t.quantity,
-          sold: 0,
-          active: true,
-        }))
-      : [{
-          tiers: "General Admission",
-          title: "General Admission",
-          description: "General Admission",
-          price: roomData.ticketPrice,
-          total: roomData.maxTickets,
-          available: roomData.maxTickets,
-          sold: 0,
-          active: true,
-        }];
+    const pricing =
+      roomData.ticketTiers && roomData.ticketTiers.length > 0
+        ? roomData.ticketTiers.map((t) => ({
+            tiers: mapTierNameToEnum(t.name),
+            title: t.name || "General Admission",
+            description: t.name || "General Admission",
+            price: t.price,
+            total: t.quantity,
+            available: t.quantity,
+            sold: 0,
+            active: true,
+          }))
+        : [
+            {
+              tiers: "General Admission",
+              title: "General Admission",
+              description: "General Admission",
+              price: roomData.ticketPrice,
+              total: roomData.maxTickets,
+              available: roomData.maxTickets,
+              sold: 0,
+              active: true,
+            },
+          ];
 
     const paidRoomData = {
       tickets: {

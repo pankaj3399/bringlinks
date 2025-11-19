@@ -307,13 +307,10 @@ UserSchema.pre("save", async function (next) {
     next();
   }
 
-  if (!user.isModified("profile.birthDate")) {
-    return next();
-  } else {
+  if (user.isModified("profile.birthDate")) {
     user.profile.demographic.age = UserSchema.methods.setAge(
       user.profile.birthDate
     );
-    next();
   }
 
   next();

@@ -62,7 +62,50 @@ class App {
     this.express.use(express.json());
     this.express.use(express.urlencoded({ extended: true }));
     this.express.use(bodyParser.json());
-    this.express.use(cors());
+    this.express.use(
+      cors({
+        origin: (origin, callback) => {
+          const allowedOrigins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8080",
+            "https://staging.bringinglinkups.com",
+            "https://www.bringinglinkups.com",
+            "https://bringinglinkups.com",
+            "https://www.admin.bringinglinkups.com",
+          ];
+
+          // Add BASE_URL from environment
+          if (
+            validateEnv.BASE_URL &&
+            !allowedOrigins.includes(validateEnv.FRONTEND_URL)
+          ) {
+            allowedOrigins.push(validateEnv.FRONTEND_URL);
+          }
+
+          // Allow requests with no origin (mobile apps, Postman, etc.)
+          if (!origin) {
+            return callback(null, true);
+          }
+
+          // Check if origin is allowed
+          if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            console.error(`❌ CORS blocked origin: ${origin}`);
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allowedHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Request-Time",
+          "my-custom-header",
+        ],
+        credentials: true,
+      })
+    );
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
     this.express.use(compression());

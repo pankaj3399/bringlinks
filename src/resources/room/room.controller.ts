@@ -504,6 +504,7 @@ class RoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const key = Object.keys(req.body)[0];
+
       const room = await getRoomBy(req.body, key);
 
       if (!room) return res.status(400).send("Room not found");

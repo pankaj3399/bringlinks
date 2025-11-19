@@ -21,6 +21,7 @@ const getAPostById = async (_id: string, user_id: string) => {
         select:
           " -auth.username -auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
       },
+      { path: "comments", model: "Comments" },
       {
         path: "shares",
         model: "PostShare",
@@ -38,7 +39,7 @@ export const getUserPosts = async (userId: string, postId: string) => {
     let posts = await Posts.findOne({
       user_Id: user_id,
       _id: postId,
-    });
+    }).populate({ path: "comments", model: "Comments" });
     if (!posts) throw new Error("Post not found");
 
     return posts;
@@ -63,38 +64,29 @@ export const getNearRoomPost = async (
     if (!foundedUser.profile.location.currentLocation)
       throw new Error("current location is needed");
 
-    // get nearby Rooms
-    const nearbyRooms = await roomsNearBy(userId, lng, ltd);
-    if (!nearbyRooms) return [];
-
-    for (const room of nearbyRooms) {
-      const roomId = room._id;
-
-      const nearbyPosts = await Posts.find({
-        // Commented out for now
-        // Posts that are no more than 4 weeks old
-        event_schedule: {
-          endDate: {
-            $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
-          },
+    const nearbyPosts = await Posts.find({
+      // Commented out for now
+      // Posts that are no more than 4 weeks old
+      event_schedule: {
+        endDate: {
+          $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
         },
-        // Posts that are not private
-        // Posts that are near the user's current location
-        postedLocation: {
-          $near: {
-            $geometry: {
-              type: "Point",
-              coordinates: [lng, ltd],
-            },
-            $maxDistance: radiusPrefMeters,
+      },
+      // Posts that are not private
+      // Posts that are near the user's current location
+      postedLocation: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, ltd],
           },
+          $maxDistance: radiusPrefMeters,
         },
-        room_Id: roomId,
-      });
-      if (!nearbyPosts) return media;
-      media.push(...nearbyPosts);
-    }
-    return media;
+      },
+      room_Id: { $exists: true, $ne: null },
+    }).populate({ path: "comments", model: "Comments" });
+
+    return nearbyPosts;
   } catch (err: any) {
     Logging.error(`Error in getNearPost: ${err}`);
     throw err;
@@ -248,12 +240,78 @@ export const getNearbyPosts = async (
           $maxDistance: radiusPrefMeters,
         },
       },
-      user_Id: userId,
-    });
+    }).populate({ path: "comments", model: "Comments" });
 
     return nearbyPosts;
   } catch (err: any) {
     Logging.error(`Error in getNearbyPosts: ${err}`);
+    throw err;
+  }
+};
+export const getCommentsReplyPaginated = async (
+  postId: string,
+  commentId: string,
+  page: number,
+  perPage: number
+) => {
+  try {
+    const comments = await Comments.find({
+      _id: commentId,
+      post_Id: postId,
+    })
+      .sort({ "stats.score": -1 })
+      .skip(page * perPage - perPage)
+      .limit(perPage)
+      .populate([
+        {
+          path: "user_id",
+          model: "User",
+          select:
+            "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms",
+        },
+        {
+          path: "post_Id",
+          model: "Posts",
+          select: "-shares -comments -stats -postedLocation -user_Id -room_Id",
+        },
+        {
+          path: "commentReply",
+          model: "Comments",
+        },
+      ]);
+
+    return comments;
+  } catch (err: any) {
+    Logging.error(`Error in getCommentsPaginated: ${err}`);
+    throw err;
+  }
+};
+export const getCommentsPaginated = async (
+  postId: string,
+  page: number,
+  perPage: number
+) => {
+  try {
+    const comments = await Posts.find({
+      _id: postId,
+    })
+      .sort({ "stats.score": -1 })
+      .skip(page * perPage - perPage)
+      .limit(perPage)
+      .lean()
+      .populate([
+        {
+          path: "user_Id",
+          model: "User",
+          select:
+            "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
+        },
+        { path: "comments", model: "Comments" },
+      ]);
+
+    return comments;
+  } catch (err: any) {
+    Logging.error(`Error in getCommentsPaginated: ${err}`);
     throw err;
   }
 };
@@ -288,7 +346,7 @@ export const getUserPost = async (userId: string) => {
         path: "user_Id",
         model: "User",
         select:
-          "-auth.username -auth.password -role -refreshToken -pendingRoomsRequest",
+          "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
       },
       {
         path: "shares",
@@ -322,7 +380,7 @@ export const updatePostMedia = async (
         path: "user_Id",
         model: "User",
         select:
-          " -auth.username -auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
+          "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
       },
       {
         path: "shares",
@@ -439,7 +497,47 @@ const unLikeAPost = async (
     Logging.log(err);
   }
 };
+export const commentReply = async (
+  userid: string,
+  comment_id: string,
+  comment: Partial<IComments>,
+  postId: string
+) => {
+  try {
+    const user_id = new mongoose.Types.ObjectId(userid);
+    const commentId = new mongoose.Types.ObjectId(comment_id);
+    const post_Id = new mongoose.Types.ObjectId(postId);
 
+    // CREATE COMMENT
+    const createdComment = await Comments.create({
+      content: comment.content,
+      post_Id,
+      user_id,
+    });
+
+    // UPDATE COMMENT
+    const postComments = await Comments.findByIdAndUpdate(
+      { _id: commentId },
+      {
+        $addToSet: { commentReply: createdComment._id },
+      },
+      { new: true }
+    );
+
+    return postComments?.populate([
+      { path: "commentReply", model: "Comments" },
+      { path: "post_Id", model: "Posts" },
+      {
+        path: "user_id",
+        model: "User",
+        select:
+          "-auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
+      },
+    ]);
+  } catch (err: any) {
+    Logging.error(err);
+  }
+};
 const comment = async (
   userid: string,
   post_id: string,
