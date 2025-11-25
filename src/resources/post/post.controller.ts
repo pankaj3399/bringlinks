@@ -50,6 +50,7 @@ import {
   validateMediaFile,
 } from "../../utils/ImageServices/postImages";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
+import { invalidatePostCache, postCacheMiddleware } from "../../middleware/cache/postCache.middleware";
 
 class PostController implements Controller {
   public path = "/posts";
@@ -59,17 +60,18 @@ class PostController implements Controller {
     this.initializeRoutes();
   }
   private initializeRoutes(): void {
-    this.router.get(`${this.path}/:postId/share-links`, this.getPostShareLinks);
+    this.router.get(`${this.path}/:postid/share-links`, postCacheMiddleware(), this.getPostShareLinks);
     this.router.put(
-      `${this.path}/:postId/stats`,
+      `${this.path}/:postid/stats`,
       validationMiddleware(validate.updatePostStats),
       RequiredAuth,
+      invalidatePostCache(),
       this.updatePostStats
     );
-    this.router.get(`${this.path}/:postId/stats/viewer`, this.addPostViewStats);
-    this.router.post(`${this.path}/:postId/share`, this.trackPostShare);
+    this.router.get(`${this.path}/:postid/stats/viewer`, this.addPostViewStats);
+    this.router.post(`${this.path}/:postid/share`, invalidatePostCache(), this.trackPostShare);
     this.router.get(
-      `${this.path}/:postId/share-analytics`,
+      `${this.path}/:postid/share-analytics`,
       RequiredAuth,
       this.getPostShareAnalytics
     );
@@ -88,11 +90,12 @@ class PostController implements Controller {
       RequiredAuth,
       this.getNearPost
     );
-    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, this.getPost);
+    this.router.get(`${this.path}/:userid/:postid`, RequiredAuth, postCacheMiddleware(), this.getPost);
     this.router.delete(
       `${this.path}/deletepost/:userid/:postid`,
       RequiredAuth,
       postPermissions,
+      invalidatePostCache(),
       this.deletePost
     );
     this.router.patch(
@@ -100,13 +103,15 @@ class PostController implements Controller {
       validationMiddleware(validate.updatePost),
       RequiredAuth,
       postPermissions,
+      invalidatePostCache(),
       this.editPost
     );
-    this.router.post(`${this.path}/like/:userid/:postid`, this.likeAPost);
+    this.router.post(`${this.path}/like/:userid/:postid`, invalidatePostCache(), this.likeAPost);
     this.router.post(
       `${this.path}/unliked/:userid/:postid/:likeid`,
       RequiredAuth,
       likePermissions,
+      invalidatePostCache(),
       this.unLikeAPost
     );
     this.router.get(
@@ -123,12 +128,14 @@ class PostController implements Controller {
       `${this.path}/comment/:userid/:postid`,
       RequiredAuth,
       validationMiddleware(commentValidate.createComment),
+      invalidatePostCache(),
       this.comment
     );
     this.router.post(
       `${this.path}/comment/:userid/:postid/:commentid/reply`,
       RequiredAuth,
       validationMiddleware(commentValidate.createComment),
+      invalidatePostCache(),
       this.commentReply
     );
     this.router.patch(
@@ -136,22 +143,26 @@ class PostController implements Controller {
       RequiredAuth,
       validationMiddleware(commentValidate.updateComment),
       commentPermissions,
+      invalidatePostCache(),
       this.editAComment
     );
     this.router.delete(
       `${this.path}/comment/:userid/:postid/:commentid`,
       RequiredAuth,
       commentPermissions,
+      invalidatePostCache(),
       this.deleteAComment
     );
     this.router.post(
       `${this.path}/upload-image/:userid/:postid`,
       RequiredAuth,
+      invalidatePostCache(),
       this.uploadPostMedia
     );
     this.router.get(
       `${this.path}/user/all/:userid`,
       RequiredAuth,
+      postCacheMiddleware(),
       this.getUserPost
     );
     this.router.get(
@@ -230,10 +241,10 @@ class PostController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { postId } = req.params;
-      if (!postId) return res.status(400).send("Id is required");
+      const { postid } = req.params;
+      if (!postid) return res.status(400).send("Id is required");
 
-      const updatedPost = await updateViews(postId);
+      const updatedPost = await updateViews(postid);
 
       if (!updatedPost)
         return res.status(400).json({ message: "Post not updated" });
@@ -391,11 +402,11 @@ class PostController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { postId } = req.params;
-      if (!postId) return res.status(400).send("Id is required");
+      const { postid } = req.params;
+      if (!postid) return res.status(400).send("Id is required");
 
       const updatedPost = await updatePostStats(
-        postId,
+        postid,
         Number(req.body.stats.timeViewed)
       );
 
@@ -583,25 +594,25 @@ class PostController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { postId } = req.params;
+      const { postid } = req.params;
       const { shareType = PostShareType.POST_SHARE, userId } = req.query;
 
-      if (!postId)
+      if (!postid)
         return res.status(400).json({ message: "Post ID is required" });
 
-      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+      if (!postid.match(/^[0-9a-fA-F]{24}$/)) {
         return res.status(400).json({ message: "Invalid post ID format" });
       }
 
       const shareLinks = await generatePostShareLinks(
-        postId,
+        postid,
         shareType as PostShareType,
         userId as string
       );
 
       res.status(200).json({
         success: true,
-        postId,
+        postId: postid,
         shareType,
         shareLinks,
       });
@@ -616,26 +627,26 @@ class PostController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { postId } = req.params;
+      const { postid } = req.params;
       const {
         platform,
         shareType = PostShareType.POST_SHARE,
         userId,
       } = req.body;
 
-      if (!postId)
+      if (!postid)
         return res.status(400).json({ message: "Post ID is required" });
       if (!platform)
         return res.status(400).json({ message: "Platform is required" });
       if (!userId)
         return res.status(400).json({ message: "User ID is required" });
 
-      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+      if (!postid.match(/^[0-9a-fA-F]{24}$/)) {
         return res.status(400).json({ message: "Invalid post ID format" });
       }
 
       const result = await trackPostShare(
-        postId,
+        postid,
         userId,
         platform as PostSharePlatform,
         shareType as PostShareType
@@ -658,20 +669,20 @@ class PostController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { postId } = req.params;
+      const { postid } = req.params;
 
-      if (!postId)
+      if (!postid)
         return res.status(400).json({ message: "Post ID is required" });
 
-      if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
+      if (!postid.match(/^[0-9a-fA-F]{24}$/)) {
         return res.status(400).json({ message: "Invalid post ID format" });
       }
 
-      const analytics = await getPostShareAnalytics(postId);
+      const analytics = await getPostShareAnalytics(postid);
 
       res.status(200).json({
         success: true,
-        postId,
+        postId: postid,
         analytics,
       });
     } catch (err: any) {

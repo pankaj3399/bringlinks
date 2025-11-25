@@ -40,6 +40,7 @@ import { IRoles, IUsers } from "./user.interface";
 import { putS3Object } from "../../utils/ImageServices/user.Img";
 import { UploadedFile } from "express-fileupload";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
+import { userCacheMiddleware, invalidateUserCache } from "../../middleware/cache/userCache.middleware";
 const imgName = ImageNAME();
 
 class UserController implements Controller {
@@ -75,18 +76,26 @@ class UserController implements Controller {
       `${this.path}/update/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.updateUser
     );
-    this.router.get(`${this.path}/:userId`, RequiredAuth, this.getUserById);
+    this.router.get(
+      `${this.path}/:userId`,
+      RequiredAuth,
+      userCacheMiddleware({ ttl: 1800 }),
+      this.getUserById
+    );
     this.router.get(
       `${this.path}/username/:username`,
       RequiredAuth,
+      userCacheMiddleware({ ttl: 1800 }),
       this.getUserByUsername
     );
     this.router.put(
       `${this.path}/userpreferences/:userId`,
       validationMiddleware(validate.userPreferences),
       RequiredAuth,
+      invalidateUserCache(),
       this.updateUserPreferences
     );
     this.router.post(
@@ -97,6 +106,7 @@ class UserController implements Controller {
     this.router.get(
       `${this.path}/schedule/:userId`,
       RequiredAuth,
+      userCacheMiddleware({ ttl: 3600 }),
       this.getSchedule
     );
     this.router.patch(
@@ -110,6 +120,7 @@ class UserController implements Controller {
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
       // isUserAccount,
+      invalidateUserCache(),
       this.deactivateUser
     );
     this.router.get(`${this.path}/logout/:userId`, RequiredAuth, this.logout);
@@ -117,36 +128,42 @@ class UserController implements Controller {
       `${this.path}/follow/:followerId/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.followAUser
     );
     this.router.post(
       `${this.path}/unfollow/:followerId/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.unFollowerAUser
     );
     this.router.put(
       `${this.path}/image/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.uploadIMG
     );
     this.router.get(
       `${this.path}/image/:userId`,
       RequiredAuth,
       isUserAccount,
+      userCacheMiddleware({ ttl: 3600 }),
       this.retrieveImg
     );
     this.router.delete(
       `${this.path}/image/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.deleteAviPhoto
     );
     this.router.get(
       `${this.path}/recommendedRooms/:userId`,
       RequiredAuth,
       isUserAccount,
+      userCacheMiddleware({ ttl: 1800 }),
       this.getRecommendedRooms
     );
   }

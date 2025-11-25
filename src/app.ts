@@ -25,6 +25,7 @@ import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import User from "./resources/user/user.model";
 import { validateEnv as env } from "../config/validateEnv";
 import stripeWebhook from "./resources/user/creator/stripe.webhook";
+import createRateLimiter from "./middleware/rateLimiter.middleware";
 
 class App {
   public express: Application;
@@ -118,6 +119,10 @@ class App {
     );
     this.express.use(passport.initialize());
     this.express.use(passport.session());
+    
+    // apply rate-limiting middleware
+    this.express.use(createRateLimiter());
+    
     this.express.set("passport", passport);
     this.express.set("io", this.io);
     this.express.use((req, res, next) => {
