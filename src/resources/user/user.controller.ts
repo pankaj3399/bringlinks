@@ -40,6 +40,8 @@ import { IRoles, IUsers } from "./user.interface";
 import { putS3Object } from "../../utils/ImageServices/user.Img";
 import { UploadedFile } from "express-fileupload";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
+import { userCacheMiddleware, invalidateUserCache } from "../../middleware/cache/userCache.middleware";
+import CacheService from "../../utils/cache/cache.service";
 const imgName = ImageNAME();
 
 class UserController implements Controller {
@@ -75,18 +77,26 @@ class UserController implements Controller {
       `${this.path}/update/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.updateUser
     );
-    this.router.get(`${this.path}/:userId`, RequiredAuth, this.getUserById);
+    this.router.get(
+      `${this.path}/:userId`,
+      RequiredAuth,
+      userCacheMiddleware({ ttl: 1800 }),
+      this.getUserById
+    );
     this.router.get(
       `${this.path}/username/:username`,
       RequiredAuth,
+      userCacheMiddleware({ ttl: 1800 }),
       this.getUserByUsername
     );
     this.router.put(
       `${this.path}/userpreferences/:userId`,
       validationMiddleware(validate.userPreferences),
       RequiredAuth,
+      invalidateUserCache(),
       this.updateUserPreferences
     );
     this.router.post(
@@ -103,6 +113,7 @@ class UserController implements Controller {
       `${this.path}/updatepassword/:refreshToken`,
       validationMiddleware(validate.changePassword),
       isUserRefreshToken,
+      invalidateUserCache(),
       this.changePassword
     );
     this.router.delete(
@@ -110,25 +121,32 @@ class UserController implements Controller {
       RequiredAuth,
       AuthorizeRole(IRoles.ADMIN),
       // isUserAccount,
+      invalidateUserCache(),
       this.deactivateUser
     );
-    this.router.get(`${this.path}/logout/:userId`, RequiredAuth, this.logout);
+    this.router.get(`${this.path}/logout/:userId`,
+      RequiredAuth,
+      invalidateUserCache(),
+      this.logout);
     this.router.post(
       `${this.path}/follow/:followerId/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.followAUser
     );
     this.router.post(
       `${this.path}/unfollow/:followerId/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.unFollowerAUser
     );
     this.router.put(
       `${this.path}/image/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.uploadIMG
     );
     this.router.get(
@@ -141,6 +159,7 @@ class UserController implements Controller {
       `${this.path}/image/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateUserCache(),
       this.deleteAviPhoto
     );
     this.router.get(
@@ -208,10 +227,12 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const [foundUser, token, refreshToken] = await loginUser(req.body);
+      const [foundUser, token, refreshToken, foundUserId] = await loginUser(req.body);
 
       if (!foundUser || !token)
         return res.status(400).json({ message: "User not found" });
+      
+      await CacheService.clearEntityCache("user", foundUserId.toString());
 
       res.cookie(validateEnv.COOKIE, token);
       res.status(200).json({ foundUser, token, refreshToken });

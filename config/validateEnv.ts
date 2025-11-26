@@ -72,4 +72,6 @@ export const validateEnv = cleanEnv(process.env, {
   SENDGRID_API_KEY: str({ default: "" }),
   ADMIN_NOTIFICATION_EMAIL: str({ default: "" }),
   EMAIL_FROM: str({ default: "" }),
+  REDIS_URL: str(),
+  REDIS_URL_TEST: str(),
 });

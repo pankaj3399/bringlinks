@@ -1,5 +1,6 @@
 import { createClient, RedisClientType } from "redis";
 import { validateEnv } from "../../config/validateEnv";
+import Logging from "../library/logging";
 
 class RedisClientMiddleware {
   public _redisClient: RedisClientType;
@@ -16,6 +17,18 @@ class RedisClientMiddleware {
     } else {
       this._redisClient = createClient({ url: redisUrlTest });
     }
+
+    // Connect to Redis
+    this._redisClient.connect().then(() => {
+      Logging.info("Redis client connected successfully");
+    }).catch((error) => {
+      Logging.error(`Redis connection error: ${error}`);
+    });
+
+    // Handle Redis errors
+    this._redisClient.on("error", (error) => {
+      Logging.error(`Redis client error: ${error}`);
+    });
   }
 }
 

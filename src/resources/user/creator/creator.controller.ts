@@ -18,6 +18,7 @@ import {
 } from "./creator.service";
 import validationMiddleware from "../../../middleware/val.middleware";
 import validate from "./creator.validation";
+import { creatorCacheMiddleware, invalidateCreatorCache } from "../../../middleware/cache/creatorCache.middleware";
 
 class CreatorController implements Controller {
   public path = "/creator";
@@ -46,19 +47,22 @@ class CreatorController implements Controller {
       `${this.path}/profile/:userId`,
       RequiredAuth,
       isUserAccount,
+      creatorCacheMiddleware(),
       this.getCreatorProfileByUserId
     );
 
     this.router.get(
       `${this.path}/profile/:creatorId`,
       RequiredAuth,
+      creatorCacheMiddleware(),
       this.getCreatorReviews
     );
 
     this.router.put(
       `${this.path}/profile/:creatorId`,
       RequiredAuth,
-      isUserAccount,
+      // isUserAccount,
+      invalidateCreatorCache(),
       this.updateCreatorProfile
     );
 
@@ -66,6 +70,7 @@ class CreatorController implements Controller {
       `${this.path}/can-create-paid-rooms/:userId`,
       RequiredAuth,
       isUserAccount,
+      creatorCacheMiddleware(),
       this.checkPaidRoomEligibility
     );
 
@@ -73,6 +78,7 @@ class CreatorController implements Controller {
       `${this.path}/earnings/:userId`,
       RequiredAuth,
       isUserAccount,
+      creatorCacheMiddleware(),
       this.getCreatorEarnings
     );
 
@@ -80,6 +86,7 @@ class CreatorController implements Controller {
       `${this.path}/stripe-connect/onboard`,
       RequiredAuth,
       validationMiddleware(validate.stripeConnectOnboarding),
+      invalidateCreatorCache(),
       this.initiateStripeConnect
     );
 
@@ -87,6 +94,7 @@ class CreatorController implements Controller {
       `${this.path}/stripe-connect/status/:userId`,
       RequiredAuth,
       isUserAccount,
+      creatorCacheMiddleware(),
       this.getStripeConnectStatus
     );
 
@@ -94,6 +102,7 @@ class CreatorController implements Controller {
       `${this.path}/stripe-connect/complete/:userId`,
       RequiredAuth,
       isUserAccount,
+      invalidateCreatorCache(),
       this.completeStripeConnect
     );
   }

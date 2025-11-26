@@ -271,7 +271,7 @@ const loginUser = async (user: IUserDocument) => {
         return [updatedUser, token, refreshToken];
       }
     }
-    return [userWithoutPassword, token, refreshToken];
+    return [userWithoutPassword, token, refreshToken, foundUser._id];
   } catch (err: any) {
     Logging.error(err);
     throw err;
