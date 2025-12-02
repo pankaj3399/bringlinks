@@ -33,6 +33,8 @@ definitions:
           
     - step: &deploy-Staging
         name: Deploy to Staging
+        clone:
+          depth: full
         script:
           - echo "Deploying backend to Heroku Staging..."
           - git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/blu-server-staging.git
@@ -40,6 +42,8 @@ definitions:
           
     - step: &deploy-Prod
         name: Deploy to Production
+        clone:
+          depth: full
         script:
           - echo "Deploying backend to Heroku Production..."
           - git remote add heroku https://heroku:$HEROKU_API_KEY@git.heroku.com/blu-backend-prod.git

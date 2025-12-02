@@ -54,7 +54,7 @@ class ReportController implements Controller {
 
       res.status(200).send(foundReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -72,7 +72,7 @@ class ReportController implements Controller {
 
       res.status(201).send(updatedReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -90,7 +90,7 @@ class ReportController implements Controller {
 
       res.status(200).send(deletedReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -105,7 +105,7 @@ class ReportController implements Controller {
 
       return res.status(201).send(createdReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 }

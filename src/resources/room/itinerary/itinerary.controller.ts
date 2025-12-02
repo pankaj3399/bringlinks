@@ -66,7 +66,7 @@ class ItineraryController implements Controller {
       Logging.info(createdItinerary);
       res.status(201).json(createdItinerary);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -85,7 +85,7 @@ class ItineraryController implements Controller {
       Logging.info(foundItinerary);
       return res.status(200).json(foundItinerary);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private updateItinerary = async (
@@ -107,7 +107,7 @@ class ItineraryController implements Controller {
       Logging.info(updatedItineraryById);
       return res.status(200).json(updatedItineraryById);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private deleteItinerary = async (
@@ -133,7 +133,7 @@ class ItineraryController implements Controller {
 
       return res.status(200).json(deletedItinerary);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 }

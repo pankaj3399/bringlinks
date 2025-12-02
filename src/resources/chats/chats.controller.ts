@@ -200,7 +200,7 @@ class ChatController implements Controller {
 
       res.status(200).json(result);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -230,7 +230,7 @@ class ChatController implements Controller {
 
       res.status(201).json(newMessage);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -255,7 +255,7 @@ class ChatController implements Controller {
 
       res.status(200).json(updatedMessage);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -279,7 +279,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Message deleted successfully" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -305,7 +305,7 @@ class ChatController implements Controller {
 
       res.status(200).json(mediaMessage);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -340,7 +340,7 @@ class ChatController implements Controller {
 
       res.status(201).json(newGroup);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -357,7 +357,7 @@ class ChatController implements Controller {
 
       res.status(200).json(group);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -372,7 +372,7 @@ class ChatController implements Controller {
       const groups = await getUserGroups(userId);
       res.status(200).json(groups);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -398,7 +398,7 @@ class ChatController implements Controller {
 
       res.status(200).json(updatedGroup);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -421,7 +421,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Member added successfully" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -443,7 +443,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Member removed successfully" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 }

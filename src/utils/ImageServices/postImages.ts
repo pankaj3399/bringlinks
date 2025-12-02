@@ -12,6 +12,7 @@ import c from "config";
 import { checkImageUrl } from "./helperFunc.ts/checkImgUrlExpiration";
 import { IPostDocument } from "../../resources/post/post.interface";
 import { updatePostMedia } from "../../resources/post/post.service";
+import { getUserIMG } from "../../resources/user/user.service";
 
 export enum MediaType {
   image = "image",
@@ -80,10 +81,12 @@ export const uploadMediaFile = async (
 
 export const getMediaSignedUrl = async (
   s3Key: string,
-  expiresIn: number = 3600
+  expiresIn: number = 8400
 ): Promise<string> => {
   try {
     Logging.log(`s3Key: ${s3Key}`);
+    if (!s3Key.includes("media")) return "s3Key is invalid";
+
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
       Key: s3Key,
@@ -125,6 +128,44 @@ export const getMediaTypeFromMimeType = (mimeType: string): MediaType => {
   }
 };
 
+export const listCheckImgUrlWithUser = async (posts: IPostDocument[]) => {
+  try {
+    var foundPostMedia = [];
+    for (const post of posts) {
+      const media = post.content.url;
+      if (!media || !post.content.name.startsWith("post-media")) continue;
+      Logging.log(`media: ${media} name: ${post.content.name}`);
+      const isValid = checkImageUrl(media);
+      if (!isValid) {
+        const url = await getMediaSignedUrl(post.content.name, 3600); // 1 hour expiry
+
+        const updatedPost = await updatePostMedia(
+          post._id,
+          url,
+          post.content.name
+        );
+
+        const userId = updatedPost?.user_Id?._id.toString() as string;
+
+        const userIMGURL = await getUserIMG(userId);
+
+        foundPostMedia.push({
+          ...updatedPost?.toObject(),
+          userImage: userIMGURL,
+        });
+      }
+
+      const userIMGURL = await getUserIMG(post?.user_Id?.toString() as string);
+
+      foundPostMedia.push({ ...post.toObject(), userImage: userIMGURL });
+    }
+    return foundPostMedia;
+  } catch (err) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
 export const listCheckImageUrl = async (posts: IPostDocument[]) => {
   try {
     var foundPostMedia = [];
@@ -133,21 +174,23 @@ export const listCheckImageUrl = async (posts: IPostDocument[]) => {
       if (!media) continue;
       const isValid = checkImageUrl(media);
       if (!isValid) {
-        const url = await getMediaSignedUrl(post.content.name, 3600); // 1 hour expiry
-        if (!url) return false;
+        const url = await getMediaSignedUrl(post.content.name);
+
         const updatedPost = await updatePostMedia(
           post._id,
           url,
           post.content.name
         );
-        if (!updatedPost) return false;
+
         foundPostMedia.push(updatedPost);
+      } else {
+        foundPostMedia.push(post);
       }
-      foundPostMedia.push(post);
     }
     return foundPostMedia;
   } catch (err) {
-    return false;
+    Logging.error(err);
+    throw err;
   }
 };
 

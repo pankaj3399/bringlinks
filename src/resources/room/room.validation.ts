@@ -61,9 +61,6 @@ const editARoom = Joi.object().keys({
   event_privacy: Joi.string().valid(RoomPrivacy.private, RoomPrivacy.public),
   event_type: Joi.string<RoomTypes>().required(),
   event_typeOther: Joi.string<string>().min(3).max(15).optional(),
-  event_IncomingRequests: Joi.array<ObjectId>()
-    .items(Joi.string<ObjectId>())
-    .optional(),
   event_name: Joi.string<string>().min(2).max(30).required(),
   event_location_address: Joi.object<Address>().keys({
     street_address: Joi.string().required(),

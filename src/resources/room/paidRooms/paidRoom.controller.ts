@@ -120,13 +120,14 @@ class PaidRoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const userId = req.user?._id; 
+      const userId = req.user?._id;
       const { roomId } = req.params;
       const { quantity = 1, tierName, successUrl, cancelUrl } = req.body;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
-      if (!roomId) return res.status(400).json({ message: "Room ID is required" });
-      if (!tierName ||typeof tierName !== "string" || !tierName.trim()){
-        return res.status(400).json({ message: "tierName is required"});
+      if (!roomId)
+        return res.status(400).json({ message: "Room ID is required" });
+      if (!tierName || typeof tierName !== "string" || !tierName.trim()) {
+        return res.status(400).json({ message: "tierName is required" });
       }
 
       const roomDoc = await Rooms.findById(roomId).select("created_user");
@@ -135,20 +136,30 @@ class PaidRoomController implements Controller {
 
       const eligibility = await canCreatePaidRooms(creatorUserId);
       if (!eligibility.canCreate) {
-        return res.status(403).json({ success: false, message: eligibility.reason });
+        return res
+          .status(403)
+          .json({ success: false, message: eligibility.reason });
       }
 
       const paidRoom = await getPaidRoom(roomId);
       const tiers = paidRoom.tickets.pricing || [];
-      if(!tiers ||tiers.length === 0) return res.status(404).json({ message: "No tiers set for this room" });
-      const normalizedTier =String(tierName).trim().toLowerCase();
-      const selected= tiers.find((t: any) =>{
-        const title = String(t.title || "").trim().toLowerCase();
-        const tierEnum= String(t.tiers || "").trim().toLowerCase();
-        return title === normalizedTier ||tierEnum === normalizedTier;
+      if (!tiers || tiers.length === 0)
+        return res.status(404).json({ message: "No tiers set for this room" });
+      const normalizedTier = String(tierName).trim().toLowerCase();
+      const selected = tiers.find((t: any) => {
+        const title = String(t.title || "")
+          .trim()
+          .toLowerCase();
+        const tierEnum = String(t.tiers || "")
+          .trim()
+          .toLowerCase();
+        return title === normalizedTier || tierEnum === normalizedTier;
       });
       if (!selected) return res.status(400).json({ message: "Tier not found" });
-      if (selected.available < quantity) return res.status(400).json({ message: "Not enough tickets available" });
+      if (selected.available < quantity)
+        return res
+          .status(400)
+          .json({ message: "Not enough tickets available" });
       const ticketAmount = selected.price;
 
       const metadata = {
@@ -159,10 +170,11 @@ class PaidRoomController implements Controller {
         quantity: String(quantity),
       } as Record<string, string>;
 
-      
       const creator = await Creator.findOne({ userId: creatorUserId });
       if (!creator || !creator.stripeConnectAccountId) {
-        return res.status(403).json({ message: "Stripe Connect account required" });
+        return res
+          .status(403)
+          .json({ message: "Stripe Connect account required" });
       }
 
       const session = await StripeService.createCheckoutSession({
@@ -176,9 +188,15 @@ class PaidRoomController implements Controller {
         metadata,
       } as any);
 
-      return res.status(200).json({ success: true, checkoutSessionId: session.id, url: session.url });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          checkoutSessionId: session.id,
+          url: session.url,
+        });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -191,12 +209,16 @@ class PaidRoomController implements Controller {
       const userId = req.user?._id;
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
-        return res.status(404).json({ message: "Creator Stripe account not found" });
+        return res
+          .status(404)
+          .json({ message: "Creator Stripe account not found" });
       }
-      const loginLink = await StripeService.createLoginLink(creator.stripeConnectAccountId);
+      const loginLink = await StripeService.createLoginLink(
+        creator.stripeConnectAccountId
+      );
       return res.status(200).json({ success: true, url: loginLink.url });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -210,47 +232,71 @@ class PaidRoomController implements Controller {
       let { amountCents } = req.body as { amountCents?: number };
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
-        return res.status(404).json({ message: "Creator Stripe account not found" });
+        return res
+          .status(404)
+          .json({ message: "Creator Stripe account not found" });
       }
 
-      const balance = await StripeService.getAccountBalance(creator.stripeConnectAccountId);
-      const availableUsd= (balance.available ||[]).filter((b: any) => b.currency?.toLowerCase() ==="usd");
-      const availableCents= availableUsd.reduce((sum: number, b: any) => sum +(Number(b.amount) || 0),0);
+      const balance = await StripeService.getAccountBalance(
+        creator.stripeConnectAccountId
+      );
+      const availableUsd = (balance.available || []).filter(
+        (b: any) => b.currency?.toLowerCase() === "usd"
+      );
+      const availableCents = availableUsd.reduce(
+        (sum: number, b: any) => sum + (Number(b.amount) || 0),
+        0
+      );
 
-      if (!amountCents|| amountCents <= 0){
+      if (!amountCents || amountCents <= 0) {
         amountCents = availableCents;
       }
 
-      if (amountCents <= 0){
-        return res.status(400).json({ message: "No available balance to payout" });
+      if (amountCents <= 0) {
+        return res
+          .status(400)
+          .json({ message: "No available balance to payout" });
       }
 
-      if (amountCents > availableCents){
-        return res.status(400).json({ message: "Payout amount exceeds available balance", availableCents });
+      if (amountCents > availableCents) {
+        return res
+          .status(400)
+          .json({
+            message: "Payout amount exceeds available balance",
+            availableCents,
+          });
       }
 
-      const payout = await StripeService.createPayout(creator.stripeConnectAccountId, amountCents, "usd");
+      const payout = await StripeService.createPayout(
+        creator.stripeConnectAccountId,
+        amountCents,
+        "usd"
+      );
       return res.status(200).json({ success: true, payout });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
-  private getCreatorStripeBalance =async(
+  private getCreatorStripeBalance = async (
     req: Request,
     res: Response,
     next: NextFunction
-  ): Promise<Response |void> =>{
+  ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
       const creator = await Creator.findOne({ userId });
       if (!creator || !creator.stripeConnectAccountId) {
-        return res.status(404).json({ message: "Creator Stripe account not found" });
+        return res
+          .status(404)
+          .json({ message: "Creator Stripe account not found" });
       }
-      const balance = await StripeService.getAccountBalance(creator.stripeConnectAccountId);
+      const balance = await StripeService.getAccountBalance(
+        creator.stripeConnectAccountId
+      );
       return res.status(200).json({ success: true, balance });
-    } catch (err: any){
-      return next(new HttpException(400, err.message));
+    } catch (err: any) {
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -261,10 +307,20 @@ class PaidRoomController implements Controller {
   ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
-      const { name, description, isPrivate, ticketPrice, maxTickets, ticketTiers } = req.body;
+      const {
+        name,
+        description,
+        isPrivate,
+        ticketPrice,
+        maxTickets,
+        ticketTiers,
+      } = req.body;
       const effectiveName = name || req.body.event_name;
       const effectiveDescription = description || req.body.event_description;
-      const effectiveIsPrivate = typeof isPrivate === "boolean" ? isPrivate : (req.body.event_privacy === "private");
+      const effectiveIsPrivate =
+        typeof isPrivate === "boolean"
+          ? isPrivate
+          : req.body.event_privacy === "private";
 
       if (!userId) {
         return res.status(400).json({ message: "User ID is required" });
@@ -283,21 +339,23 @@ class PaidRoomController implements Controller {
       const eligibility = await canCreatePaidRooms(userId);
 
       if (!eligibility.canCreate) {
-        if (eligibility.reason === "Stripe Connect account required" ||
-            eligibility.reason === "Stripe Connect account not active") {
+        if (
+          eligibility.reason === "Stripe Connect account required" ||
+          eligibility.reason === "Stripe Connect account not active"
+        ) {
           return res.status(403).json({
             success: false,
             message: "Stripe Connect account required to create paid rooms",
             reason: eligibility.reason,
             redirectTo: "/creator/stripe-connect/onboard",
-            action: "redirect_to_stripe_connect"
+            action: "redirect_to_stripe_connect",
           });
         }
 
         return res.status(403).json({
           success: false,
           message: eligibility.reason,
-          action: "creator_approval_required"
+          action: "creator_approval_required",
         });
       }
 
@@ -323,7 +381,7 @@ class PaidRoomController implements Controller {
         qrCode: qrCode,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -345,7 +403,7 @@ class PaidRoomController implements Controller {
 
       res.status(200).json(foundPaidRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private vaultCard = async (
@@ -356,16 +414,20 @@ class PaidRoomController implements Controller {
     try {
       const { roomId, userId } = req.params;
       if (!roomId || !userId) {
-        return res.status(400).json({ message: "Room ID and User ID are required" });
+        return res
+          .status(400)
+          .json({ message: "Room ID and User ID are required" });
       }
       const { cardInfo } = req.body;
       if (!cardInfo) {
         return res.status(400).json({ message: "Card info is required" });
       }
 
-      return res.status(503).json({ message: "Card vaulting temporarily disabled" });
+      return res
+        .status(503)
+        .json({ message: "Card vaulting temporarily disabled" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -379,11 +441,12 @@ class PaidRoomController implements Controller {
       if (!roomId) return res.status(400).send("User Id is required");
 
       const createdPaidRoom = await addTickets(roomId, req.body);
-      if (!createdPaidRoom) return res.status(400).send("Paid room not created");
+      if (!createdPaidRoom)
+        return res.status(400).send("Paid room not created");
 
       res.status(201).send(createdPaidRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -401,7 +464,7 @@ class PaidRoomController implements Controller {
 
       res.status(200).send(paidRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -425,10 +488,17 @@ class PaidRoomController implements Controller {
       //   quantity: 3,
       // });
 
-      const paid = { success: false, message: "Ticket purchase temporarily disabled" } as any;
+      const paid = {
+        success: false,
+        message: "Ticket purchase temporarily disabled",
+      } as any;
 
       // update room Param replace with receiptId
-      const updatedPaidRoom = await buyTickets(userId, { ...req.body, roomId }, userId);
+      const updatedPaidRoom = await buyTickets(
+        userId,
+        { ...req.body, roomId },
+        userId
+      );
 
       if (!updatedPaidRoom) return res.status(400).send({ message: paid });
 
@@ -445,7 +515,7 @@ class PaidRoomController implements Controller {
         updatePaidRoom: updatedPaidRoom,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -459,11 +529,12 @@ class PaidRoomController implements Controller {
       if (!roomId) return res.status(400).send("User Id is required");
 
       const updatedPaidRoom = await updatePaidRoom(req.body);
-      if (!updatedPaidRoom) return res.status(400).send("Paid room not updated");
+      if (!updatedPaidRoom)
+        return res.status(400).send("Paid room not updated");
 
       res.status(201).send(updatedPaidRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -477,11 +548,12 @@ class PaidRoomController implements Controller {
       if (!roomId) return res.status(400).send("User Id is required");
 
       const deletedPaidRoom = await deletePaidRoom(roomId);
-      if (!deletedPaidRoom) return res.status(400).send("Paid room not deleted");
+      if (!deletedPaidRoom)
+        return res.status(400).send("Paid room not deleted");
 
       res.status(200).send(deletedPaidRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 }

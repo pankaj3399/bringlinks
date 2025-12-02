@@ -37,8 +37,8 @@ class App {
     this.Http = http.createServer(this.express);
     this.io = new Server(this.Http, {
       cors: {
-        origin: validateEnv.BASE_URL || "*", // Replace with front-end URL
-        methods: ["GET", "POST"],
+        origin: validateEnv.BASE_URL, // Replace with front-end URL
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: ["my-custom-header"],
         credentials: true,
       },
@@ -57,7 +57,12 @@ class App {
         limits: { fileSize: 300 * 1024 * 1024 },
         useTempFiles: false,
         abortOnLimit: true,
-      })
+      }),
+    );
+    // Stripe webhook needs raw body for signature verification
+    this.express.use(
+      "/stripe/webhook",
+      express.raw({ type: "application/json" }),
     );
     this.express.use(express.json());
     this.express.use(express.urlencoded({ extended: true }));
@@ -78,13 +83,14 @@ class App {
           // Add BASE_URL from environment
           if (
             validateEnv.BASE_URL &&
-            !allowedOrigins.includes(validateEnv.FRONTEND_URL)
+            !allowedOrigins.includes(validateEnv.BASE_URL)
           ) {
-            allowedOrigins.push(validateEnv.FRONTEND_URL);
+            allowedOrigins.push(validateEnv.BASE_URL);
           }
 
           // Allow requests with no origin (mobile apps, Postman, etc.)
           if (!origin) {
+            Logging.info(`CORS origin is ${origin}`);
             return callback(null, true);
           }
 
@@ -92,11 +98,11 @@ class App {
           if (allowedOrigins.includes(origin)) {
             callback(null, true);
           } else {
-            console.error(`❌ CORS blocked origin: ${origin}`);
+            Logging.error(`❌ CORS blocked origin: ${origin}`);
             callback(new Error("Not allowed by CORS"));
           }
         },
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: [
           "Content-Type",
           "Authorization",
@@ -104,7 +110,7 @@ class App {
           "my-custom-header",
         ],
         credentials: true,
-      })
+      }),
     );
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
@@ -114,7 +120,7 @@ class App {
         secret: env.COOKIE,
         resave: false,
         saveUninitialized: false,
-      })
+      }),
     );
     this.express.use(passport.initialize());
     this.express.use(passport.session());
@@ -123,13 +129,13 @@ class App {
     this.express.use((req, res, next) => {
       /* Log the req */
       Logging.info(
-        `Incoming - METHOD: [${req.method}] - URL: [${req.url}] - IP: [${req.socket.remoteAddress}]`
+        `Incoming - METHOD: [${req.method}] - URL: [${req.url}] - IP: [${req.socket.remoteAddress}]`,
       );
 
       res.on("finish", () => {
         /* Log the res */
         Logging.info(
-          `Result - METHOD: [${req.method}] - URL: [${req.url}] - IP: [${req.socket.remoteAddress}] - STATUS: [${res.statusCode}]`
+          `Result - METHOD: [${req.method}] - URL: [${req.url}] - IP: [${req.socket.remoteAddress}] - STATUS: [${res.statusCode}]`,
         );
       });
       next();
@@ -142,17 +148,17 @@ class App {
     passport.deserializeUser(
       async (
         id: string,
-        done: (err: any, user?: any | false | null) => void
+        done: (err: any, user?: any | false | null) => void,
       ) => {
         try {
           const user = await User.findById(id).select(
-            "-auth.password -refreshToken"
+            "-auth.password -refreshToken",
           );
           done(null, user);
         } catch (e) {
           done(e as any, null);
         }
-      }
+      },
     );
 
     passport.use(
@@ -166,7 +172,7 @@ class App {
           _accessToken: string,
           _refreshToken: string,
           profile: any,
-          done: (err: any, user?: any, info?: any) => void
+          done: (err: any, user?: any, info?: any) => void,
         ) => {
           try {
             const googleId = profile.id;
@@ -180,7 +186,7 @@ class App {
             if (!user) {
               const safeUsername = `google_${String(googleId || "user").slice(
                 0,
-                24
+                24,
               )}`;
               user = await User.create({
                 auth: {
@@ -206,8 +212,8 @@ class App {
           } catch (err) {
             return done(err as any, undefined);
           }
-        }
-      )
+        },
+      ),
     );
   }
   private initializeSocket(io: Server): void {
@@ -217,7 +223,7 @@ class App {
       connectionCount++;
 
       Logging.log(
-        `A user connected: ${socket.id} (Total connections: ${connectionCount})`
+        `A user connected: ${socket.id} (Total connections: ${connectionCount})`,
       );
 
       socket.on("error", (error: unknown) => {
@@ -261,21 +267,21 @@ class App {
               if (chatType === ChatTypes.user && receiver) {
                 io.to(receiver as unknown as string).emit(
                   "receiveMessage",
-                  newMessage
+                  newMessage,
                 );
                 io.to(sender as unknown as string).emit(
                   "receiveMessage",
-                  newMessage
+                  newMessage,
                 );
               } else if (chatType === ChatTypes.group && groupId) {
                 io.to(groupId as unknown as string).emit(
                   "receiveMessage",
-                  newMessage
+                  newMessage,
                 );
               } else if (chatType === ChatTypes.room && room_Id) {
                 io.to(room_Id as unknown as string).emit(
                   "receiveMessage",
-                  newMessage
+                  newMessage,
                 );
               }
 
@@ -284,7 +290,7 @@ class App {
           } catch (error) {
             socket.emit("messageError", { error: "Failed to send message" });
           }
-        }
+        },
       );
 
       socket.on("editMessage", async ({ messageId, newMessage, userId }) => {
@@ -292,7 +298,7 @@ class App {
           const updatedMessage = await editMessage(
             messageId,
             newMessage,
-            userId
+            userId,
           );
 
           if (updatedMessage) {
@@ -302,11 +308,11 @@ class App {
             ) {
               io.to(updatedMessage.receiver as unknown as string).emit(
                 "messageEdited",
-                updatedMessage
+                updatedMessage,
               );
               io.to(updatedMessage.sender as unknown as string).emit(
                 "messageEdited",
-                updatedMessage
+                updatedMessage,
               );
             } else if (
               updatedMessage.chatType === ChatTypes.group &&
@@ -314,7 +320,7 @@ class App {
             ) {
               io.to(updatedMessage.group as unknown as string).emit(
                 "messageEdited",
-                updatedMessage
+                updatedMessage,
               );
             } else if (
               updatedMessage.chatType === ChatTypes.room &&
@@ -322,7 +328,7 @@ class App {
             ) {
               io.to(updatedMessage.room_Id as unknown as string).emit(
                 "messageEdited",
-                updatedMessage
+                updatedMessage,
               );
             }
           }
@@ -341,11 +347,11 @@ class App {
               if (message.chatType === ChatTypes.user && message.receiver) {
                 io.to(message.receiver as unknown as string).emit(
                   "messageDeleted",
-                  { messageId }
+                  { messageId },
                 );
                 io.to(message.sender as unknown as string).emit(
                   "messageDeleted",
-                  { messageId }
+                  { messageId },
                 );
               } else if (
                 message.chatType === ChatTypes.group &&
@@ -353,7 +359,7 @@ class App {
               ) {
                 io.to(message.group as unknown as string).emit(
                   "messageDeleted",
-                  { messageId }
+                  { messageId },
                 );
               } else if (
                 message.chatType === ChatTypes.room &&
@@ -361,7 +367,7 @@ class App {
               ) {
                 io.to(message.room_Id as unknown as string).emit(
                   "messageDeleted",
-                  { messageId }
+                  { messageId },
                 );
               }
             }
@@ -374,7 +380,7 @@ class App {
       socket.on("disconnect", () => {
         connectionCount--;
         Logging.log(
-          `A user disconnected: ${socket.id} (Total connections: ${connectionCount})`
+          `A user disconnected: ${socket.id} (Total connections: ${connectionCount})`,
         );
       });
     });
@@ -394,7 +400,7 @@ class App {
 
     mongoose.connection.on("connected", () => {
       Logging.info(
-        `Successful connection to Database: ${Mongo_Path.split("&")[2]}`
+        `Successful connection to Database: ${Mongo_Path.split("&")[2]}`,
       );
     });
     mongoose.connection.on("error", (err) => {

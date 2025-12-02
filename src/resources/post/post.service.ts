@@ -6,7 +6,8 @@ import Likes from "../likes/likes.model";
 import { IComments } from "../comments/comments.interface";
 import Comments from "../comments/comments.model";
 import User from "../user/user.model";
-import { roomsNearBy } from "../room/room.service";
+import Rooms from "../room/room.model";
+import { getUserIMG } from "../user/user.service";
 
 const getAPostById = async (_id: string, user_id: string) => {
   try {
@@ -142,14 +143,35 @@ const getNearPost = async (userId: string, lng: number, ltd: number) => {
   }
 };
 
-const createAPost = async (post: IPostDocument, user_id: string) => {
+const createAPost = async (
+  post: IPostDocument,
+  user_id: string,
+  roomId: string | undefined = ""
+) => {
   try {
+    const room_Id = roomId ? new mongoose.Types.ObjectId(roomId) : undefined;
+
+    if (room_Id) {
+      const room = await Rooms.findById(room_Id);
+      if (!room) throw new Error("Room not found");
+    }
+
+    Logging.log(room_Id);
     const createdPost = await Posts.create({
       ...post,
       user_Id: user_id,
+      room_Id,
     } as any);
     if (!createdPost) throw new Error("Post is not created");
 
+    if (room_Id) {
+      await Rooms.findByIdAndUpdate(
+        { _id: room_Id },
+        {
+          $addToSet: { posts: createdPost._id },
+        }
+      );
+    }
     const user = user_id as string;
 
     const updatedPost = await Posts.findByIdAndUpdate(createdPost._id, {
@@ -174,6 +196,44 @@ const createAPost = async (post: IPostDocument, user_id: string) => {
     ).populate({ path: "likes", model: "Likes" });
   } catch (err: any) {
     Logging.error(err);
+    throw err;
+  }
+};
+
+export const createARoomPost = async (
+  post: Partial<IPostDocument>,
+  roomId: string,
+  userId: string
+) => {
+  try {
+    const createdPost = await Posts.create({
+      ...post,
+      user_Id: userId,
+      room_Id: roomId,
+    });
+
+    if (!createdPost) throw new Error("Post is not created");
+
+    const roomupdated = await Rooms.findByIdAndUpdate(
+      { _id: roomId },
+      {
+        $addToSet: { posts: createdPost._id },
+      }
+    );
+
+    if (!roomupdated) throw new Error("Room not updated");
+
+    return (
+      await createdPost.populate({
+        path: "user_Id",
+        model: "User",
+        select:
+          "-auth.password -role -refreshToken -pendingRoomsRequest -enteredRooms",
+      })
+    ).populate({ path: "comments", model: "Comments" });
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
   }
 };
 
@@ -204,10 +264,12 @@ const deleteAPost = async (user_id: string, post_id: string) => {
     Logging.error(err);
   }
 };
-export const getNearbyPosts = async (
+export const getNearbyPostsPaginated = async (
   userId: string,
   lng: number,
-  ltd: number
+  ltd: number,
+  page: number,
+  perPage: number
 ) => {
   try {
     const foundedUser = await User.findOne({ _id: userId }).clone();
@@ -240,7 +302,14 @@ export const getNearbyPosts = async (
           $maxDistance: radiusPrefMeters,
         },
       },
-    }).populate({ path: "comments", model: "Comments" });
+    })
+      .sort({ "stats.score": -1 })
+      .skip(page * perPage - perPage)
+      .limit(perPage)
+      .populate([
+        { path: "comments", model: "Comments" },
+        { path: "likes", model: "Likes" },
+      ]);
 
     return nearbyPosts;
   } catch (err: any) {
@@ -304,7 +373,7 @@ export const getCommentsPaginated = async (
           path: "user_Id",
           model: "User",
           select:
-            "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
+            "-auth.password -auth.email -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
         },
         { path: "comments", model: "Comments" },
       ]);
@@ -312,6 +381,73 @@ export const getCommentsPaginated = async (
     return comments;
   } catch (err: any) {
     Logging.error(`Error in getCommentsPaginated: ${err}`);
+    throw err;
+  }
+};
+
+export const getCommentsWithImages = async (posts: IPostDocument[]) => {
+  try {
+    const commentsWithImages = await Promise.all(
+      posts.map(async (post, index) => {
+        const foundComment = await Comments.findById(post.comments[index]._id);
+        const Images = await getUserIMG(
+          foundComment?.user_id?.toString() as string
+        );
+        Logging.log(`Images: ${JSON.stringify(Images)}`);
+        return {
+          ...post,
+          comments: post.comments.map((comment) => {
+            return {
+              ...comment,
+              userIMG: Images,
+            };
+          }),
+        };
+      })
+    );
+
+    return commentsWithImages;
+  } catch (err: any) {
+    Logging.error(`Error in getCommentsWithImages: ${err}`);
+    throw err;
+  }
+};
+
+export const getRoomPostPaginated = async (
+  roomId: string,
+  page: number,
+  perPage: number
+) => {
+  try {
+    const posts = await Posts.find({
+      room_Id: roomId,
+    })
+      .sort({ "stats.score": -1 })
+      .skip(page * perPage - perPage)
+      .limit(perPage)
+      .populate([
+        {
+          path: "room_Id",
+          model: "Rooms",
+          select:
+            "event_name event_type event_typeOther event_location_address event_location event_schedule event_privacy paid created_user specialGuest event_sponsors shares stats",
+        },
+        {
+          path: "shares",
+          model: "PostShare",
+          select: "platform shareType shareUrl analytics createdAt",
+        },
+        {
+          path: "user_Id",
+          model: "User",
+          select:
+            "_id auth.username profile.location.currentLocation.coordinates",
+        },
+      ]);
+
+    return posts;
+  } catch (err: any) {
+    Logging.error(`Error in getRoomPostPaginated: ${err}`);
     throw err;
   }
 };
@@ -358,6 +494,7 @@ export const getUserPost = async (userId: string) => {
     return foundedPost;
   } catch (err: any) {
     Logging.error(err);
+    throw err;
   }
 };
 
@@ -380,7 +517,7 @@ export const updatePostMedia = async (
         path: "user_Id",
         model: "User",
         select:
-          "-auth -role -refreshToken -pendingRoomsRequest -enteredRooms -profile.lastName -profile.firstName -profile.birthDate -profile.occupation -profile.privacy -profile.location -enteredRooms -refreshToken -pendingRoomsRequest",
+          "_id auth.username profile.location.currentLocation.coordinates",
       },
       {
         path: "shares",
@@ -390,6 +527,7 @@ export const updatePostMedia = async (
     ]);
   } catch (err: any) {
     Logging.error(err);
+    throw err;
   }
 };
 
@@ -421,6 +559,7 @@ const updatePost = async (post: Partial<IPostDocument>) => {
     ).populate({ path: "comments", model: "Comments" });
   } catch (err: any) {
     Logging.log(err);
+    throw err;
   }
 };
 
@@ -495,6 +634,7 @@ const unLikeAPost = async (
     return updatedPost;
   } catch (err: any) {
     Logging.log(err);
+    throw err;
   }
 };
 export const commentReply = async (
@@ -536,21 +676,39 @@ export const commentReply = async (
     ]);
   } catch (err: any) {
     Logging.error(err);
+    throw err;
   }
 };
 const comment = async (
   userid: string,
   post_id: string,
-  comment: Partial<IComments>
+  comment: Partial<IComments>,
+  roomId: string | undefined = ""
 ) => {
   try {
     const postId = new mongoose.Types.ObjectId(post_id);
     const userId = new mongoose.Types.ObjectId(userid);
+    const room_Id = roomId ? new mongoose.Types.ObjectId(roomId) : undefined;
+
+    const foundPost = await Posts.findById(postId);
+    if (!foundPost) throw new Error("Post not found");
+
+    if (room_Id) {
+      const room = await Rooms.findById(room_Id);
+      // find post with roomId
+      const foundPostWithRoomId = await Posts.findOne({
+        _id: postId,
+        room_Id: room_Id,
+      });
+      Logging.log(foundPostWithRoomId);
+      if (!room || !foundPostWithRoomId) throw new Error("Room Post Not Found");
+    }
 
     const createdComment = await Comments.create({
       content: comment.content,
       post_Id: postId,
       user_id: userId,
+      roomId: room_Id,
     });
 
     if (!createdComment) throw new Error("Comment not created");
@@ -566,6 +724,7 @@ const comment = async (
     return postComments?.populate({ path: "comments", model: "Comments" });
   } catch (err: any) {
     Logging.error(err);
+    throw err;
   }
 };
 export const updateViews = async (postId: string) => {
@@ -587,7 +746,19 @@ export const updateViews = async (postId: string) => {
     Logging.error(err);
   }
 };
+export const getLikes = async (postId: string, userId: string) => {
+  try {
+    const likes = await Likes.find({
+      posts: postId,
+      user_Id: userId,
+    });
 
+    return likes;
+  } catch (err: any) {
+    Logging.error(`Error in getLikesPaginated: ${err}`);
+    throw err;
+  }
+};
 export const updatePostStats = async (postId: string, timeViewed: number) => {
   try {
     // update post stats with timeViewed in seconds

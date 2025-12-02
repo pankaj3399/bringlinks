@@ -584,7 +584,7 @@ export const addAviIMG = async (user_Id: string, fileName: string) => {
     throw err.message;
   }
 };
-export const getIMG = async (id: string) => {
+export const getUserIMG = async (id: string) => {
   try {
     const _id = id as string;
     const foundUser = await User.findOne({ _id: _id })
@@ -597,7 +597,7 @@ export const getIMG = async (id: string) => {
 
     if (foundUser.profile.avi?.aviUrl) return foundUser.profile.avi.aviUrl;
     if (!foundUser.profile.avi?.aviName) {
-      throw new Error("User has no avatar set");
+      return "No Avatar";
     }
 
     const imgUrl = await retrieveIMG(foundUser.profile.avi.aviName).catch(

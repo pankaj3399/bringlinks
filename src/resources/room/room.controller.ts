@@ -32,6 +32,11 @@ import {
   createPurchaseQRCode,
   createEntryQRCode,
   getRoomDemographics,
+  joinRoom,
+  isEnteredRoom,
+  getCreatorIMG,
+  getAllUserEnteredRooms,
+  getRoomsWithImages,
 } from "./room.service";
 import {
   generateShareLinks,
@@ -57,8 +62,13 @@ import {
 import { RequiredAuth } from "../../middleware/auth.middleware";
 import fileUpload, { UploadedFile } from "express-fileupload";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { uploadRoomImage } from "../../utils/ImageServices/roomFlyer.Img";
+import {
+  listCheckRoomImgUrl,
+  uploadRoomImage,
+} from "../../utils/ImageServices/roomFlyer.Img";
 import mongoose from "mongoose";
+import { get } from "config";
+import { IRoomsDocument } from "./room.interface";
 var toId = mongoose.Types.ObjectId;
 
 class RoomController implements Controller {
@@ -109,6 +119,12 @@ class RoomController implements Controller {
       RequiredAuth,
       this.getRoomBy
     );
+    // given a coordinate and userId return all rooms nearby 40 miles radius
+    this.router.get(
+      `${this.path}/user/coordinates/:userId`,
+      RequiredAuth,
+      this.searchRoomsByCoordinates
+    );
     this.router.get(`${this.path}/allrooms`, RequiredAuth, this.getAllRooms);
     this.router.get(
       `${this.path}/allroomspaginated`,
@@ -142,6 +158,12 @@ class RoomController implements Controller {
       roomAdminPermissions,
       this.addAnAdmin
     );
+    this.router.get(
+      `${this.path}/join/:userId/:roomId`,
+      RequiredAuth,
+      isUserAccount,
+      this.joinRoom
+    );
     this.router.post(
       `${this.path}/incominginvite/:userId/:roomId`,
       RequiredAuth,
@@ -172,6 +194,12 @@ class RoomController implements Controller {
       roomAdminPermissions,
       isInvitedPermissions,
       this.acceptRoomInvite
+    );
+    this.router.get(
+      `${this.path}/user/entered/:userId`,
+      RequiredAuth,
+      isUserAccount,
+      this.allUserEnteredRooms
     );
     this.router.put(
       `${this.path}/image/:userId/:roomId`,
@@ -208,7 +236,12 @@ class RoomController implements Controller {
       validationMiddleware(validate.addSponsor),
       this.addSponsor
     );
-
+    this.router.get(
+      `${this.path}/entered/:userId/:roomId`,
+      RequiredAuth,
+      isUserAccount,
+      this.isEnteredRoom
+    );
     this.router.get(
       `${this.path}/getqrcode/:roomId`,
       RequiredAuth,
@@ -249,7 +282,7 @@ class RoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { roomId } = req.params;
+      const { roomId, userId } = req.params;
       const { fileType } = req.query;
 
       if (fileType !== FileType.media)
@@ -282,7 +315,7 @@ class RoomController implements Controller {
           );
           Logging.warning(mediaCommand);
           await uploadRoomImage(mediaCommand as PutObjectCommand);
-          await addMediaImage(roomId, mediaFileName);
+          await addMediaImage(roomId, mediaFileName, userId);
         })
       ).catch((err) => {
         Logging.error(err);
@@ -290,10 +323,29 @@ class RoomController implements Controller {
       const url = await getIMG(roomId, fileType as FileType);
       res.status(201).send({ url });
     } catch (err: any) {
-      next(new HttpException(400, err));
+      return next(new HttpException(400, err));
     }
   };
 
+  private joinRoom = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userId, roomId } = req.params;
+      if (!userId || !roomId) return res.status(400).send("Id is required");
+
+      const joinedRoom = await joinRoom(userId, roomId);
+
+      if (!joinedRoom)
+        return res.status(400).json({ message: "Room not joined" });
+
+      res.status(200).json(joinedRoom);
+    } catch (err: any) {
+      return next(new HttpException(res.statusCode, err.message));
+    }
+  };
   private getRoomQRCode = async (
     req: Request,
     res: Response,
@@ -309,7 +361,7 @@ class RoomController implements Controller {
 
       res.status(200).json({ qrCode, type: "room" });
     } catch (err: any) {
-      next(new HttpException(400, err));
+      return next(new HttpException(400, err));
     }
   };
 
@@ -333,7 +385,7 @@ class RoomController implements Controller {
 
       res.status(200).json({ qrCode, type: "purchase" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -352,7 +404,7 @@ class RoomController implements Controller {
 
       res.status(200).json(demographics);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -380,7 +432,7 @@ class RoomController implements Controller {
 
       res.status(200).json({ qrCode, type: "purchase" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -408,7 +460,7 @@ class RoomController implements Controller {
 
       res.status(200).json({ qrCode, type: "entry" });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -436,9 +488,12 @@ class RoomController implements Controller {
 
       const room = await getARoom(roomId as string);
 
+      const creatorImg = await getCreatorIMG(room._id);
+
       return res.status(200).json({
         success: true,
-        room,
+        ...room,
+        creatorImg,
       });
     } catch (err: any) {
       Logging.error(`Error getting room: ${err.message}`);
@@ -448,7 +503,25 @@ class RoomController implements Controller {
           message: err.message,
         });
       }
-      next(new HttpException(500, err.message));
+      return next(new HttpException(500, err.message));
+    }
+  };
+  private isEnteredRoom = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userId, roomId } = req.params;
+      if (!userId || !roomId) return res.status(400).send("Id is required");
+
+      const isEntered = await isEnteredRoom(userId, roomId);
+      if (!isEntered)
+        return res.status(400).json({ message: "User is not entered" });
+
+      res.status(200).json({ message: "User is entered", isEntered });
+    } catch (err: any) {
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -494,7 +567,7 @@ class RoomController implements Controller {
       res.status(200).json(publicRoomData);
     } catch (err: any) {
       Logging.error(err);
-      next(new HttpException(404, err.message));
+      return next(new HttpException(404, err.message));
     }
   };
   private getRoomBy = async (
@@ -513,7 +586,7 @@ class RoomController implements Controller {
       res.status(200).json(room);
     } catch (err: any) {
       Logging.error(err);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -529,7 +602,7 @@ class RoomController implements Controller {
       Logging.info(allRooms);
       res.status(200).json(allRooms);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -555,7 +628,7 @@ class RoomController implements Controller {
       Logging.info(createdRoom);
       res.status(201).send({ createdRoom, qrCode });
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -574,7 +647,7 @@ class RoomController implements Controller {
       Logging.info(deletedRoom);
       res.status(200).send(deletedRoom);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -593,7 +666,7 @@ class RoomController implements Controller {
       Logging.info(updatedRoom);
       res.status(201).send(updatedRoom);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -611,7 +684,7 @@ class RoomController implements Controller {
 
       res.status(202).send(room);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   //invitation by a user to a room
@@ -628,7 +701,7 @@ class RoomController implements Controller {
       if (!room) return res.status(400).send("Room invite not sent");
       res.status(201).send(room);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -649,7 +722,7 @@ class RoomController implements Controller {
       Logging.info(foundedRooms);
       res.status(200).json(foundedRooms);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private getRelatedRooms = async (
@@ -668,7 +741,7 @@ class RoomController implements Controller {
       Logging.info(foundedRooms);
       res.status(200).json(foundedRooms);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   //invitation by a user by room attendees
@@ -686,7 +759,7 @@ class RoomController implements Controller {
       if (!room) return res.status(400).send("Room invite not sent");
       res.status(200).send(room);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -707,7 +780,7 @@ class RoomController implements Controller {
 
       if (modifiedCount === 1) return res.status(201).send(modifiedCount);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -724,7 +797,7 @@ class RoomController implements Controller {
       if (!room) return res.status(400).send("Room not deleted");
       res.status(201).send(room);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private acceptRoomInvite = async (
@@ -740,7 +813,7 @@ class RoomController implements Controller {
       if (!room) return res.status(400).send("Room invite not accepted");
       res.status(200).send(room);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private getRoomNearby = async (
@@ -767,7 +840,7 @@ class RoomController implements Controller {
       Logging.info(nearByRooms);
       res.status(201).json(nearByRooms);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      next(new HttpException(res.statusCode, err.message));
     }
   };
   private getAllRoomsPaginated = async (
@@ -791,9 +864,58 @@ class RoomController implements Controller {
       Logging.info(paginatedRooms);
       res.status(200).json(paginatedRooms);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
+
+  private allUserEnteredRooms = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userId } = req.params;
+      if (!userId) return res.status(400).send("User Id is required");
+
+      const enteredRooms = await getAllUserEnteredRooms(userId);
+
+      if (!enteredRooms) return res.status(400).send(`room couldn't be found`);
+
+      Logging.info(enteredRooms);
+      res.status(200).json(enteredRooms);
+    } catch (err: any) {
+      return next(new HttpException(res.statusCode, err.message));
+    }
+  };
+
+  private searchRoomsByCoordinates = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userId } = req.params;
+      const { lng, ltd } = req.query;
+      if (!userId) return res.status(400).send("User Id is required");
+      if (lng == null || ltd == null)
+        return res.status(400).send("Location is needed");
+
+      const lngNum = Number(String(lng).replace(/\s+/g, ""));
+      const ltdNum = Number(String(ltd).replace(/\s+/g, ""));
+      if (!Number.isFinite(lngNum) || !Number.isFinite(ltdNum)) {
+        return res.status(400).send("Invalid location coordinates");
+      }
+
+      const nearByRooms = await roomsNearBy(userId, lngNum, ltdNum);
+      if (!nearByRooms) return res.status(400).send(`room couldn't be found`);
+
+      Logging.info(nearByRooms);
+      res.status(201).json(nearByRooms);
+    } catch (err: any) {
+      return next(new HttpException(res.statusCode, err.message));
+    }
+  };
+
   private getRoomNearbyPaginated = async (
     req: Request,
     res: Response,
@@ -826,12 +948,14 @@ class RoomController implements Controller {
         skip,
         limitNum
       );
-      if (!nearByRooms) return res.status(400).send(`room couldn't be found`);
+      if (!nearByRooms) return res.status(res.statusCode).send([]);
 
       Logging.info(nearByRooms);
-      res.status(201).json(nearByRooms);
+      const nearByRoomsWithImages = await getRoomsWithImages(nearByRooms);
+
+      res.status(res.statusCode).json(nearByRoomsWithImages);
     } catch (err: any) {
-      next(new HttpException(401, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -851,7 +975,7 @@ class RoomController implements Controller {
 
       res.status(200).send(foundImage);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
   private uploadIMG = async (
@@ -944,7 +1068,7 @@ class RoomController implements Controller {
       }
     } catch (err: any) {
       Logging.error(err);
-      next(new HttpException(400, err));
+      return next(new HttpException(400, err));
     }
   };
   private addGuest = async (
@@ -973,7 +1097,7 @@ class RoomController implements Controller {
 
       res.status(201).send(addedGuest);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -996,7 +1120,7 @@ class RoomController implements Controller {
 
       res.status(201).send(addedGuest);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -1030,7 +1154,7 @@ class RoomController implements Controller {
         shareLinks,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -1071,7 +1195,7 @@ class RoomController implements Controller {
         platform: result.platform,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -1098,7 +1222,7 @@ class RoomController implements Controller {
         analytics,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 
@@ -1133,7 +1257,7 @@ class RoomController implements Controller {
 
       res.redirect(originalUrl);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(res.statusCode, err.message));
     }
   };
 }

@@ -1,5 +1,5 @@
 import mongoose, { Error } from "mongoose";
-import { GenderType, Race } from "../../resources/user/user.interface";
+import { GenderType, Race, Types } from "../../resources/user/user.interface";
 import User from "../user/user.model";
 import Logging from "../../library/logging";
 import {
@@ -16,6 +16,9 @@ import { IPaidRooms } from "./paidRooms/paidRoom.interface";
 import QRCode from "qrcode";
 import { validateEnv } from "../../../config/validateEnv";
 import { createRegex } from "../../utils/ImageServices/helperFunc.ts/mongoose/partialRegex";
+import { createARoomPost } from "../post/post.service";
+import { getUserIMG } from "../user/user.service";
+import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
 
 const getARoom = async (id: string) => {
   try {
@@ -548,7 +551,23 @@ export const createRoomQRCode = async (roomId: string) => {
     throw err;
   }
 };
+export const isEnteredRoom = async (userId: string, roomId: string) => {
+  try {
+    const room = await Rooms.findById(roomId);
+    if (!room) throw new Error("Room not found");
 
+    const enteredRoom = await Rooms.findOne({
+      _id: roomId,
+      entered_id: userId,
+    });
+    if (!enteredRoom) throw new Error("User is not entered");
+
+    return true;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
 export const getQRCode = async (roomId: string) => {
   try {
     const room = await Rooms.findById(roomId);
@@ -782,7 +801,8 @@ const updateRoom = async (
     return foundedRoom.populate({
       path: "created_user",
       model: "User",
-      select: "-auth.password -role",
+      select:
+        "-auth.password -auth.email -role -refreshToken -wallet -signupCode -creator",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -802,7 +822,8 @@ const addAnAdmin = async (room_id: string, newAdmin: string) => {
       .populate({
         path: "created_user",
         model: "User",
-        select: "-auth.password -role",
+        select:
+          "-auth.password -auth.email -role -refreshToken -wallet -signupCode -creator",
       })
       .clone();
 
@@ -861,7 +882,7 @@ const inviteAUser = async (room_id: string, inviteeId: string) => {
         path: "entered_id",
         model: "User",
         select:
-          "-auth.password -role -profile.firstName -profile.lastName -refreshToken",
+          "-auth.password -auth.email -role -refreshToken -wallet -signupCode -creator",
       })
       .clone();
 
@@ -900,7 +921,7 @@ const unInviteAUser = async (inviteeId: string, room_id: string) => {
         path: "entered_id",
         model: "User",
         select:
-          "-auth.password -role -profile.firstName -profile.lastName -refreshToken",
+          "-auth.password -auth.email -role -refreshToken -wallet -signupCode -creator",
       })
       .clone();
 
@@ -917,6 +938,25 @@ const unInviteAUser = async (inviteeId: string, room_id: string) => {
     throw err;
   }
 };
+export const joinRoom = async (user_id: string, room_id: string) => {
+  try {
+    const userId = user_id as string;
+    const roomId = room_id as string;
+
+    const updatedRoom = await Rooms.updateOne(
+      { _id: roomId },
+      {
+        $addToSet: { entered_id: userId },
+      }
+    ).clone();
+
+    return updatedRoom.modifiedCount;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
 const acceptRoomInvite = async (user_id: string, room_id: string) => {
   try {
     const userId = user_id as string;
@@ -965,6 +1005,26 @@ export const roomsGetallPaginated = async (skip: number, limit: number) => {
     throw err;
   }
 };
+
+export const getAllUserEnteredRooms = async (userId: string) => {
+  try {
+    const userIdString = userId as string;
+
+    const foundedUser = await User.findById(userIdString).select(
+      "-auth.password -refreshToken"
+    );
+    if (!foundedUser) throw new Error("User not found");
+
+    const enteredRooms = await Rooms.find({ entered_id: userIdString }).lean();
+
+    if (!enteredRooms) throw new Error("Room not found");
+
+    return enteredRooms;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
 export const roomsNearByPaginated = async (
   user_id: string,
   lng: number,
@@ -987,6 +1047,10 @@ export const roomsNearByPaginated = async (
       throw new Error("current location is needed");
 
     const nearbyRooms = await Rooms.find({
+      "event_schedule.startDate": {
+        $gte: Date.now() - 24 * 60 * 60 * 1000,
+      },
+
       event_location: {
         $near: {
           $geometry: {
@@ -1007,7 +1071,50 @@ export const roomsNearByPaginated = async (
   }
 };
 
-const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
+export const getRoomsWithImages = async (rooms: IRoomsDocument[]) => {
+  try {
+    var foundPostMedia = [];
+    const roomImages = await Promise.all(
+      rooms.map(async (room, index) => {
+        const roomImGName = room.event_flyer_img.name;
+        if (!roomImGName) return foundPostMedia.push(room);
+        const imageUrl = room.event_flyer_img.url;
+
+        const isValid = checkImageUrl(imageUrl);
+        if (!isValid) {
+          const url = await retrieveRoomIMG(roomImGName);
+
+          const updatedRoomFlyer = await Rooms.findByIdAndUpdate(
+            { _id: room._id },
+            {
+              $set: {
+                "event_flyer_img.url": url,
+              },
+            }
+          );
+
+          foundPostMedia.push(updatedRoomFlyer);
+        } else {
+          foundPostMedia.push(room);
+        }
+
+        return { ...room.toObject(), freshIMG: imageUrl };
+      })
+    );
+
+    return roomImages;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
+const roomsNearBy = async (
+  user_id: string,
+  lng: number,
+  ltd: number,
+  radius: number | undefined = 35
+) => {
   try {
     const userId = user_id as string;
 
@@ -1016,24 +1123,27 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
     if (!foundedUser?.profile.location.radiusPreference) {
       throw new Error("radius preference is needed");
     }
-    const radiusPrefMeters =
-      foundedUser?.profile.location.radiusPreference * 1609.34;
+    const radiusPrefMeters = radius
+      ? radius * 1609.34
+      : foundedUser?.profile.location.radiusPreference * 1609.34;
 
+    Logging.log(
+      `Using coordinates from parameters: ${JSON.stringify(radiusPrefMeters)}`
+    );
     if (!foundedUser.profile.location.currentLocation)
       throw new Error("current location is needed");
 
     const nearbyRooms = await Rooms.find({
-      //uncomment if you want to only show more than 4 weeks old rooms
-      // Rooms that are no more than 4 weeks old
-      // event_schedule: {
-      //   endDate: {
-      //     $gte: Date.now() - 4 * 7 * 24 * 60 * 60 * 1000,
-      //   },
-      // },
+      // Rooms event_schedule that are up coming up later than now - a day before
+      "event_schedule.startDate": {
+        $gte: Date.now() - 24 * 60 * 60 * 1000,
+      },
+
       // Rooms that are not private
       event_privacy: {
         $ne: RoomPrivacy.private,
       },
+
       // Rooms that are near the user's current location
       event_location: {
         $near: {
@@ -1063,7 +1173,7 @@ const roomsNearBy = async (user_id: string, lng: number, ltd: number) => {
     throw err;
   }
 };
-//
+
 export const incomingInvite = async (user_id: string, room_id: string) => {
   try {
     const userId = user_id as string;
@@ -1121,16 +1231,20 @@ export const getIMG = async (id: string, fileType?: Partial<FileType>) => {
     }
 
     if (fileType === FileType.media) {
+      Logging.log(`Hitting media`);
       const mediaItems = (foundRoom.event_media_img || []).filter(
         (m: any) => typeof m?.name === "string" && m.name.length > 0
       );
+      Logging.log(`mediaItems: ${JSON.stringify(mediaItems)}`);
       const updated = await Promise.all(
         mediaItems.map(async (media: IMGNames) => {
+          Logging.log(`${media.name}`);
           const imgUrl = await retrieveRoomIMG(media.name).catch((err) => {
             Logging.error(err);
             throw err;
           });
           if (!imgUrl) throw new Error("Image not found");
+          Logging.log(`imgUrl: ${imgUrl}`);
           await Rooms.updateOne(
             { _id, "event_media_img.name": media.name },
             { $set: { "event_media_img.$.url": imgUrl } }
@@ -1186,6 +1300,29 @@ export const getIMG = async (id: string, fileType?: Partial<FileType>) => {
 
       return imgUrl;
     }
+  } catch (err: any) {
+    Logging.error(err.message);
+    throw err.message;
+  }
+};
+export const getCreatorIMG = async (roomId: string) => {
+  try {
+    const room = await Rooms.findById(roomId).populate({
+      path: "created_user",
+      model: "User",
+      select: "_id profile.avi",
+    });
+
+    if (!room) throw new Error("Room not found");
+    const creatorId = room?.created_user._id.toString();
+
+    const imgUrl = await getUserIMG(creatorId).catch((err) => {
+      Logging.error(err);
+      throw err;
+    });
+
+    if (!imgUrl) throw new Error("Image not found");
+    return imgUrl;
   } catch (err: any) {
     Logging.error(err.message);
     throw err.message;
@@ -1258,18 +1395,45 @@ export const addVenueImage = async (room_Id: string, fileName: string) => {
     throw err.message;
   }
 };
-export const addMediaImage = async (room_Id: string, fileName: string) => {
+export const addMediaImage = async (
+  room_Id: string,
+  fileName: string,
+  userId: string
+) => {
   try {
+    Logging.log(`addMediaImage: ${fileName}`);
+    Logging.log(`room_Id: ${room_Id}`);
+    Logging.log(`userId: ${userId}`);
+
     const foundRoom = await getARoom(room_Id);
     if (!foundRoom) throw new Error("Room not found");
 
-    foundRoom?.event_media_img.push({ name: fileName, url: "" });
+    const updatedRoom = await Rooms.updateOne(
+      {
+        _id: room_Id,
+      },
+      { $addToSet: { event_media_img: { name: fileName, url: "" } } }
+    );
 
-    await foundRoom?.save().catch((err: any) => {
-      throw err.message;
-    });
+    if (!updatedRoom) throw new Error("Room not updated");
 
-    return foundRoom;
+    //create a post with media
+    const createdPost = await createARoomPost(
+      {
+        content: {
+          name: fileName,
+          url: "",
+        },
+        postedLocation: {
+          type: Types.Point,
+          coordinates: foundRoom.event_location.coordinates,
+        },
+      },
+      room_Id,
+      userId
+    );
+
+    return updatedRoom;
   } catch (err: any) {
     Logging.error(err.message);
     throw err.message;

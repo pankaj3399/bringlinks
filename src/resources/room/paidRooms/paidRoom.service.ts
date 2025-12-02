@@ -85,7 +85,8 @@ export const buyTickets = async (
       { _id: room_Id },
       {
         $addToSet: { entered_id: user_Id },
-      }
+      },
+      { new: true }
     ).populate({
       path: "paidRoom",
       model: "PaidRooms",
