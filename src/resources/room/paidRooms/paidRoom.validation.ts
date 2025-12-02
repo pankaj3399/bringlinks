@@ -1,7 +1,7 @@
 import Joi from "joi";
 import { IPaidRooms, Tiers } from "./paidRoom.interface";
 
-const buyTickets = Joi.object<Pick<IPaidRooms, "tickets" | "paidUsers">>({
+const buyTickets = Joi.object<Pick<IPaidRooms, "tickets">>({
   tickets: Joi.array().items(
     Joi.object({
       pricing: Joi.array().items(
@@ -10,6 +10,7 @@ const buyTickets = Joi.object<Pick<IPaidRooms, "tickets" | "paidUsers">>({
         })
       ),
       paidUsers: Joi.array().items(Joi.string().required()),
+      roomId: Joi.string(),
     })
   ),
 });
@@ -30,8 +31,8 @@ const updatePaidRoom = Joi.object<Partial<IPaidRooms>>({
 });
 
 const createPaidRoom = Joi.object<Partial<IPaidRooms>>({
-  roomId: Joi.string().required(),
   tickets: Joi.object({
+    roomId: Joi.string().required(),
     ticketsTotal: Joi.number().required(),
     pricing: Joi.array().items(
       Joi.object({
@@ -48,8 +49,8 @@ const createPaidRoom = Joi.object<Partial<IPaidRooms>>({
 });
 
 const addTickets = Joi.object<Partial<IPaidRooms>>({
-  roomId: Joi.string().required(),
   tickets: Joi.object({
+    roomId: Joi.string().required(),
     ticketsTotal: Joi.number().required(),
     pricing: Joi.array().items(
       Joi.object({

@@ -38,7 +38,7 @@ export const buyTickets = async (
   receiptId: string
 ) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
@@ -50,11 +50,11 @@ export const buyTickets = async (
     }
 
     const paid_Room = await PaidRoom.updateOne(
-      { roomId: room_Id },
+      { "tickets.roomId": room_Id },
       {
         $addToSet: {
-          paidUsers: paidRoom.paidUsers,
-          receiptId,
+          "tickets.paidUsers": paidRoom.tickets.paidUsers,
+          "tickets.receiptId": receiptId,
         },
         $inc: {
           "tickets.totalSold": 1,
@@ -107,7 +107,7 @@ export const buyTickets = async (
 
 export const updatePaidRoom = async (room: IPaidRooms) => {
   try {
-    const foundRoom = await Rooms.findById(room.roomId);
+    const foundRoom = await Rooms.findById(room.tickets.roomId);
     if (!foundRoom) throw new Error("Paid room not found");
 
     const updatedRoom = await PaidRoom.updateOne(
@@ -154,24 +154,24 @@ export const deletePaidRoom = async (roomId: string) => {
 // reflect when a user ask for a refund
 export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
 
     const foundRoom = await PaidRoom.updateOne(
       {
-        roomId: room_Id,
+        "tickets.roomId": room_Id,
         _id: paidRoom._id,
       },
       {
         // reflect when a user ask for a refund
         tickets: {
           $inc: {
-            totalTicketsAvailable: 1,
-            totalSold: -1,
-          },
-          $pull: {
-            paidUsers: user_Id,
-            receiptId: paidRoom.receiptId,
+          "tickets.totalTicketsAvailable": 1,
+          "tickets.totalSold": -1,
+        },
+        $pull: {
+          "tickets.paidUsers": user_Id,
+          "tickets.receiptId": paidRoom.tickets.receiptId,
           },
           pricing: {
             $eq: {

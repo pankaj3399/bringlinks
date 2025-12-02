@@ -124,26 +124,57 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const userId = metadata.userId;
     const tierTitle = metadata.tierTitle;
     const quantity = parseInt(metadata.quantity || "1", 10) || 1;
-    if (!roomId || !userId) return;
 
-    const paidRoom = await PaidRoom.findOne({ roomId });
-    if (!paidRoom) return;
+    if (!roomId || !userId) {
+      Logging.error(`Missing metadata - roomId: ${roomId}, userId: ${userId}`);
+      return;
+    }
+
+    const paidRoom = await PaidRoom.findOne({ "tickets.roomId": roomId });
+    if (!paidRoom) {
+      Logging.error(`PaidRoom not found for roomId: ${roomId}`);
+      return;
+    }
+
 
     const pricing = paidRoom.tickets?.pricing || [] as any[];
     const idx = pricing.findIndex((p: any) => p.title === tierTitle || p.tiers === tierTitle);
-    const target = idx >= 0 ? pricing[idx] : pricing[0];
-    if (target) {
-      target.sold += quantity;
-      target.available = Math.max(0, target.available - quantity);
+    
+    if (idx === -1) {
+      Logging.error(`Tier "${tierTitle}" not found! Available tiers: ${pricing.map((p: any) => p.title).join(', ')}`);
+      return;
     }
-    paidRoom.tickets.totalSold += quantity;
-    paidRoom.tickets.totalTicketsAvailable = Math.max(0, paidRoom.tickets.totalTicketsAvailable - quantity);
-    if (!paidRoom.receiptId) paidRoom.receiptId = [] as any;
+    
+    const target = pricing[idx];
+    
+    if (target.available < quantity) {
+      Logging.error(`Insufficient tickets!`);
+      return;
+    }
+        
+    target.sold = (target.sold || 0) + quantity;
+    target.available = Math.max(0, target.available - quantity);
+    
+    const revenue = target.price * quantity;
+    paidRoom.tickets.totalRevenue = (paidRoom.tickets.totalRevenue || 0) + revenue;
+    
+    if (!paidRoom.tickets.receiptId) {
+      paidRoom.tickets.receiptId = [];
+    }
     const pi = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
-    if (pi) (paidRoom.receiptId as any).push(pi);
-    if (!paidRoom.paidUsers) paidRoom.paidUsers = [] as any;
-    (paidRoom.paidUsers as any).push(userId);
+    if (pi) {
+      (paidRoom.tickets.receiptId as any).push(pi);
+    }
+    
+    if (!paidRoom.tickets.paidUsers) {
+      paidRoom.tickets.paidUsers = [];
+    }
+    if (!paidRoom.tickets.paidUsers.includes(userId as any)) {
+      (paidRoom.tickets.paidUsers as any).push(userId);
+    }
 
+    paidRoom.markModified('tickets');
+    
     await paidRoom.save();
 
     try {
