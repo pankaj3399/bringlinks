@@ -2,8 +2,6 @@ import mongoose, { Document } from "mongoose";
 
 export interface IPaidRooms extends Document {
   tickets: Tickets;
-  refreshToken: string;
-  paid?: boolean;
 }
 
 export type Tickets = {
@@ -15,6 +13,8 @@ export type Tickets = {
   roomId: mongoose.Types.ObjectId;
   receiptId?: string[];
   paidUsers?: mongoose.Types.ObjectId[];
+  refreshToken?: string;
+  paid?: boolean;
 };
 
 export type PricingTiers = {

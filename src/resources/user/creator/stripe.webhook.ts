@@ -148,7 +148,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const target = pricing[idx];
     
     if (target.available < quantity) {
-      Logging.error(`Insufficient tickets!`);
+      Logging.error(`Insufficient tickets! Requested: ${quantity}, Available: ${target.available}`);
       return;
     }
         
@@ -169,7 +169,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     if (!paidRoom.tickets.paidUsers) {
       paidRoom.tickets.paidUsers = [];
     }
-    if (!paidRoom.tickets.paidUsers.includes(userId as any)) {
+    if (!paidRoom.tickets.paidUsers.some((id) => id.toString() === userId)) {
       (paidRoom.tickets.paidUsers as any).push(userId);
     }
 

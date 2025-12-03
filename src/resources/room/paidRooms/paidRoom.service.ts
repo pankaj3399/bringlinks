@@ -235,20 +235,11 @@ export const addTickets = async (roomId: string, payload: Partial<IPaidRooms>) =
     }
 
     const newPricing = incomingPricing.map((tier: any) => ({
-      tiers: tier.tiers,
-      description: tier.description,
-      title: tier.title,
-      total: tier.total,
-      price: tier.price,
-      available: tier.available,
+      ...tier,
       sold: tier.sold ?? 0,
-      active: tier.active,
     }));
 
-    const ticketsToAdd = newPricing.reduce((sum: number, tier: any) => {
-      const total = Number(tier?.total ?? 0);
-      return Number.isFinite(total) && total > 0 ? sum + total : sum;
-    }, 0);
+    const ticketsToAdd = newPricing.reduce((sum: number, tier: any) => sum + tier.total, 0);
 
     if (ticketsToAdd <= 0) {
       throw new Error("ticketsTotal must be greater than 0");
