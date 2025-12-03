@@ -129,16 +129,22 @@ export const updatePaidRoom = async (room: IPaidRooms) => {
 
 export const deletePaidRoom = async (roomId: string) => {
   try {
-    const roomIdToDelete = roomId as string;
+    const roomIdToDelete = String(roomId);
     const foundRoom = await Rooms.findById(roomIdToDelete);
     if (!foundRoom) throw new Error("Paid room not found");
 
-    await PaidRoom.deleteOne({ _id: foundRoom.paidRoom });
+    await PaidRoom.deleteMany({
+      $or: [
+        { _id: foundRoom.paidRoom },
+        { "tickets.roomId": foundRoom._id },
+        { roomId: foundRoom._id as any },
+      ],
+    });
 
     const updatedRooms = await Rooms.updateOne(
       { _id: roomIdToDelete },
       {
-        $pull: { paidRoom: roomIdToDelete },
+        $set: { paidRoom: null, paid: false },
       }
     );
 
@@ -211,34 +217,60 @@ export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   }
 };
 
-export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
+export const addTickets = async (roomId: string, payload: Partial<IPaidRooms>) => {
   try {
-    const room_Id = roomId as string;
-    const foundRoom = await Rooms.findById(room_Id);
+    const room_Id = String(roomId);
 
-    if (!foundRoom) throw new Error("Room not found");
+    const room = await Rooms.findById(room_Id).select("paidRoom");
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (!room.paidRoom) {
+      throw new Error("Paid room not found");
+    }
 
-    const paid_Room = await PaidRoom.create({
-      roomId: room_Id,
-      tickets: {
-        ticketsTotal: paidRoom.tickets.ticketsTotal,
-        $addToSet: {
-          pricing: paidRoom.tickets.pricing,
+    const incomingPricing = (payload?.tickets?.pricing || []) as any[];
+    if (!Array.isArray(incomingPricing) || incomingPricing.length === 0) {
+      throw new Error("At least one pricing tier is required");
+    }
+
+    const newPricing = incomingPricing.map((tier: any) => ({
+      tiers: tier.tiers,
+      description: tier.description,
+      title: tier.title,
+      total: tier.total,
+      price: tier.price,
+      available: tier.available,
+      sold: tier.sold ?? 0,
+      active: tier.active,
+    }));
+
+    const ticketsToAdd = newPricing.reduce((sum: number, tier: any) => {
+      const total = Number(tier?.total ?? 0);
+      return Number.isFinite(total) && total > 0 ? sum + total : sum;
+    }, 0);
+
+    if (ticketsToAdd <= 0) {
+      throw new Error("ticketsTotal must be greater than 0");
+    }
+
+    const updatedPaidRoom = await PaidRoom.findByIdAndUpdate(
+      room.paidRoom,
+      {
+        $push: { "tickets.pricing": { $each: newPricing } },
+        $inc: {
+          "tickets.ticketsTotal": ticketsToAdd,
+          "tickets.totalTicketsAvailable": ticketsToAdd,
         },
       },
-    });
+      { new: true }
+    );
 
-    if (!paid_Room) throw new Error("Paid room not created");
+    if (!updatedPaidRoom) {
+      throw new Error("Paid room not updated");
+    }
 
-    //update room
-    const updatedRoom = await Rooms.findByIdAndUpdate(room_Id, {
-      paid: true,
-      paidRoom: paid_Room._id,
-    });
-
-    if (!updatedRoom) throw new Error("Room not updated");
-
-    return paid_Room;
+    return updatedPaidRoom;
   } catch (err) {
     Logging.error(err);
     throw err;

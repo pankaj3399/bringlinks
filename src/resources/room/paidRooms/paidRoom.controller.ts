@@ -69,12 +69,6 @@ class PaidRoomController implements Controller {
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
-      this.purchaseTickets
-    );
-    this.router.patch(
-      `${this.path}/rooms/:userId/:roomId`,
-      RequiredAuth,
-      isUserAccount,
       roomAdminPermissions,
       this.updatePaidRoom
     );
