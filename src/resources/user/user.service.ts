@@ -681,15 +681,47 @@ export const getUserRecommendRooms = async (
       (id: any) => new mongoose.Types.ObjectId(id)
     );
     
-    const networkUserIds = [
+    let networkUserIds = [
       ...new Set([
         ...followingIds.map((id) => id.toString()),
         ...followerIds.map((id) => id.toString()),
       ]),
     ].map((id) => new mongoose.Types.ObjectId(id));
 
+    if (networkUserIds.length > 0) {
+      const secondDegreeUsers = await User.find(
+        { _id: { $in: networkUserIds } },
+        { following: 1, followers: 1 }
+      ).lean();
+
+      let secondDegreeIds: mongoose.Types.ObjectId[] = [];
+      for (const u of secondDegreeUsers) {
+        if (u.following && Array.isArray(u.following)) {
+          secondDegreeIds.push(
+            ...u.following.map((id: any) => new mongoose.Types.ObjectId(id))
+          );
+        }
+        if (u.followers && Array.isArray(u.followers)) {
+          secondDegreeIds.push(
+            ...u.followers.map((id: any) => new mongoose.Types.ObjectId(id))
+          );
+        }
+      }
+
+      const allNetworkIdsSet = new Set([
+        ...networkUserIds.map((id) => id.toString()),
+        ...secondDegreeIds.map((id) => id.toString()),
+      ]);
+      allNetworkIdsSet.delete(userObjectId.toString());
+      networkUserIds = Array.from(allNetworkIdsSet).map(
+        (id) => new mongoose.Types.ObjectId(id)
+      );
+    }
+
     if (networkUserIds.length === 0) {
-      Logging.info(`User ${userId} has no network (following/followers)`);
+      Logging.info(
+        `User ${userId} has no network (following/followers or second-degree)`
+      );
       return [];
     }
 
@@ -705,7 +737,12 @@ export const getUserRecommendRooms = async (
       },
     ];
 
-    if (filterByLocation && lat && lng) {
+    if (filterByLocation) {
+      if (lat == null || lng == null) {
+        throw new Error(
+          "Latitude and longitude must be provided when filterByLocation is true."
+        );
+      }
       roomMatchConditions.push({
         event_location: {
           $nearSphere: {
