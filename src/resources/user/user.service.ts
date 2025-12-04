@@ -16,6 +16,8 @@ import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgU
 import { validateAndUseSignupCode } from "../signupCode/signupCode.service";
 import { use } from "passport";
 import { parseAllowedStates } from "../../utils/parseStates/allowedStates";
+import mongoose from "mongoose";
+import Rooms from "../room/room.model";
 
 const getUserUsername = async (username: string) => {
   try {
@@ -646,114 +648,19 @@ export const deleteIMG = async (id: string) => {
   }
 };
 
-const getUserRecommendedRooms = async (userId: string) => {
-  try {
-    const recommendRooms = await User.aggregate([
-      {
-        $match: {
-          _id: userId as string,
-        },
-      },
-      {
-        $graphLookup: {
-          from: "User",
-          startWith: { $setUnion: ["$following", "$followers"] },
-          connectFromField: "following",
-          connectToField: "_id",
-          as: "network",
-          maxDepth: 3,
-        },
-      },
-      {
-        $project: {
-          _id: 1,
-          networkUserIds: "$network._id",
-        },
-      },
-      {
-        $lookup: {
-          from: "events",
-          let: { networkIds: "$networkUserIds" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $gt: [
-                    {
-                      $size: {
-                        $setIntersection: ["$attendees", "$$networkIds"],
-                      },
-                    },
-                    0,
-                  ],
-                },
-              },
-            },
-          ],
-          as: "networkEvents",
-        },
-      },
-      {
-        $lookup: {
-          from: "Rooms",
-          let: { userId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $in: ["$$userId", "$attendees"] },
-              },
-            },
-          ],
-          as: "userEvents",
-        },
-      },
-      {
-        $project: {
-          networkEvents: 1,
-          userEventIds: {
-            $map: {
-              input: "$userEvents",
-              as: "event",
-              in: "$$event._id",
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          recommendedEvents: {
-            $filter: {
-              input: "$networkEvents",
-              as: "recommend",
-              cond: {
-                $not: { $in: ["$$recommend._id", "$userEventIds"] },
-              },
-            },
-          },
-        },
-      },
-      { $unwind: "$recommendedEvents" },
-      { $replaceRoot: { newRoot: "$recommendedEvents" } },
-    ]);
-
-    return recommendRooms;
-  } catch (err: any) {
-    Logging.error(err);
-    throw err;
-  }
-};
-
 export const getUserRecommendRooms = async (
   userId: string,
   filterByLocation = false
 ) => {
   try {
-    const userObjectId = userId as string;
+    const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Get user’s current location and radius (in miles)
     const user = await User.findById(userObjectId, {
       "profile.location.currentLocation.coordinates": 1,
       "profile.location.radiusPreference": 1,
+      "following": 1,
+      "followers": 1,
+      "enteredRooms": 1,
     }).lean();
 
     if (!user) throw new Error("User not found");
@@ -762,119 +669,86 @@ export const getUserRecommendRooms = async (
       user?.profile?.location?.currentLocation?.coordinates || [];
     const radiusPreference = user?.profile?.location?.radiusPreference || 20;
 
-    //const radiusInMeters = radiusInMiles * 1609.34; // miles to meters
-
     const now = new Date();
+    const userEnteredRoomIds = (user.enteredRooms || []).map(
+      (id: any) => new mongoose.Types.ObjectId(id)
+    );
 
-    const aggregation = [
-      { $match: { _id: userObjectId } },
+    const followingIds = (user.following || []).map(
+      (id: any) => new mongoose.Types.ObjectId(id)
+    );
+    const followerIds = (user.followers || []).map(
+      (id: any) => new mongoose.Types.ObjectId(id)
+    );
+    
+    const networkUserIds = [
+      ...new Set([
+        ...followingIds.map((id) => id.toString()),
+        ...followerIds.map((id) => id.toString()),
+      ]),
+    ].map((id) => new mongoose.Types.ObjectId(id));
 
+    if (networkUserIds.length === 0) {
+      Logging.info(`User ${userId} has no network (following/followers)`);
+      return [];
+    }
+
+    const roomMatchConditions: any[] = [
       {
-        $graphLookup: {
-          from: "User",
-          startWith: { $setUnion: ["$following", "$followers"] },
-          connectFromField: "following",
-          connectToField: "_id",
-          as: "network",
-          maxDepth: 1,
-        },
+        entered_id: { $in: networkUserIds },
       },
       {
-        $project: {
-          _id: 1,
-          networkUserIds: "$network._id",
-        },
+        "event_schedule.endDate": { $gt: now },
       },
       {
-        $lookup: {
-          from: "Rooms",
-          let: { networkIds: "$networkUserIds" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    {
-                      $gt: [
-                        {
-                          $size: {
-                            $setIntersection: ["$entered_id", "$$networkIds"],
-                          },
-                        },
-                        0,
-                      ],
-                    },
-                    { $gt: ["$event_schedule.endDate", Date.now()] },
-                  ],
-                },
-              },
-            },
-            ...(filterByLocation && lat && lng
-              ? [
-                  {
-                    $match: {
-                      event_location: {
-                        $nearSphere: {
-                          $geometry: {
-                            type: "Point",
-                            coordinates: [lng, lat],
-                          },
-                          $maxDistance: radiusPreference,
-                        },
-                      },
-                    },
-                  },
-                ]
-              : []),
-          ],
-          as: "networkRooms",
-        },
+        $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
       },
-      {
-        $lookup: {
-          from: "rooms",
-          let: { userId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $in: ["$$userId", "$entered_id"] },
-              },
-            },
-          ],
-          as: "userRooms",
-        },
-      },
-      {
-        $project: {
-          networkRooms: 1,
-          userRoomIds: {
-            $map: {
-              input: "$userRooms",
-              as: "room",
-              in: "$$room._id",
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          recommendedRooms: {
-            $filter: {
-              input: "$networkRooms",
-              as: "room",
-              cond: {
-                $not: { $in: ["$$room._id", "$userRoomIds"] },
-              },
-            },
-          },
-        },
-      },
-      { $unwind: "$recommendedRooms" },
-      { $replaceRoot: { newRoot: "$recommendedRooms" } },
     ];
 
-    const results = await User.aggregate(aggregation);
-    return results;
+    if (filterByLocation && lat && lng) {
+      roomMatchConditions.push({
+        event_location: {
+          $nearSphere: {
+            $geometry: {
+              type: "Point",
+              coordinates: [lng, lat],
+            },
+            $maxDistance: radiusPreference * 1609.34,
+          },
+        },
+      });
+    }
+
+    if (userEnteredRoomIds.length > 0) {
+      roomMatchConditions.push({
+        _id: { $nin: userEnteredRoomIds },
+      });
+    }
+
+    const recommendedRooms = await Rooms.find({
+      $and: roomMatchConditions,
+    })
+      .populate([
+        {
+          path: "created_user",
+          model: "User",
+          select: "_id auth.username profile.firstName profile.avi",
+        },
+        {
+          path: "event_admin",
+          model: "User",
+          select: "_id auth.username profile.firstName profile.avi",
+        },
+      ])
+      .lean()
+      .sort({ "event_schedule.startDate": 1 })
+      .limit(50);
+
+    Logging.info(
+      `Found ${recommendedRooms.length} recommended rooms for user ${userId}`
+    );
+
+    return recommendedRooms;
   } catch (err: any) {
     Logging.error(err);
     throw err;
