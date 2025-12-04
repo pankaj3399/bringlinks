@@ -109,10 +109,13 @@ PaidRoomSchema.pre("save", function (next) {
     0
   );
   this.tickets.totalTicketsAvailable = this.tickets.pricing.reduce(
-    (acc, curr) => acc + curr.total,
+    (acc, curr) => acc + curr.available,
     0
   );
-  this.tickets.totalSold = 0;
+  this.tickets.totalSold = this.tickets.pricing.reduce(
+    (acc, curr) => acc + curr.sold,
+    0
+  );
 
   next();
 });

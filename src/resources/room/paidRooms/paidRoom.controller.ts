@@ -69,12 +69,6 @@ class PaidRoomController implements Controller {
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
-      this.purchaseTickets
-    );
-    this.router.patch(
-      `${this.path}/rooms/:userId/:roomId`,
-      RequiredAuth,
-      isUserAccount,
       roomAdminPermissions,
       this.updatePaidRoom
     );
@@ -156,10 +150,26 @@ class PaidRoomController implements Controller {
         return title === normalizedTier || tierEnum === normalizedTier;
       });
       if (!selected) return res.status(400).json({ message: "Tier not found" });
-      if (selected.available < quantity)
-        return res
-          .status(400)
-          .json({ message: "Not enough tickets available" });
+      
+      if (selected.available <= 0) {
+        return res.status(400).json({ 
+          success: false,
+          message: "This tier is sold out",
+          reason: "sold_out",
+          tier: selected.title
+        });
+      }
+      
+      if (selected.available < quantity) {
+        return res.status(400).json({ 
+          success: false,
+          message: `Only ${selected.available} tickets available for ${selected.title}`,
+          reason: "insufficient_tickets",
+          available: selected.available,
+          requested: quantity
+        });
+      }
+      
       const ticketAmount = selected.price;
 
       const metadata = {

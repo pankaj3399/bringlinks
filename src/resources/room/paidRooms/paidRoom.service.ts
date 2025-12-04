@@ -38,7 +38,7 @@ export const buyTickets = async (
   receiptId: string
 ) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
@@ -50,11 +50,11 @@ export const buyTickets = async (
     }
 
     const paid_Room = await PaidRoom.updateOne(
-      { roomId: room_Id },
+      { "tickets.roomId": room_Id },
       {
         $addToSet: {
-          paidUsers: paidRoom.paidUsers,
-          receiptId,
+          "tickets.paidUsers": paidRoom.tickets.paidUsers,
+          "tickets.receiptId": receiptId,
         },
         $inc: {
           "tickets.totalSold": 1,
@@ -107,7 +107,7 @@ export const buyTickets = async (
 
 export const updatePaidRoom = async (room: IPaidRooms) => {
   try {
-    const foundRoom = await Rooms.findById(room.roomId);
+    const foundRoom = await Rooms.findById(room.tickets.roomId);
     if (!foundRoom) throw new Error("Paid room not found");
 
     const updatedRoom = await PaidRoom.updateOne(
@@ -129,16 +129,22 @@ export const updatePaidRoom = async (room: IPaidRooms) => {
 
 export const deletePaidRoom = async (roomId: string) => {
   try {
-    const roomIdToDelete = roomId as string;
+    const roomIdToDelete = String(roomId);
     const foundRoom = await Rooms.findById(roomIdToDelete);
     if (!foundRoom) throw new Error("Paid room not found");
 
-    await PaidRoom.deleteOne({ _id: foundRoom.paidRoom });
+    await PaidRoom.deleteMany({
+      $or: [
+        { _id: foundRoom.paidRoom },
+        { "tickets.roomId": foundRoom._id },
+        { roomId: foundRoom._id as any },
+      ],
+    });
 
     const updatedRooms = await Rooms.updateOne(
       { _id: roomIdToDelete },
       {
-        $pull: { paidRoom: roomIdToDelete },
+        $set: { paidRoom: null, paid: false },
       }
     );
 
@@ -154,24 +160,24 @@ export const deletePaidRoom = async (roomId: string) => {
 // reflect when a user ask for a refund
 export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
 
     const foundRoom = await PaidRoom.updateOne(
       {
-        roomId: room_Id,
+        "tickets.roomId": room_Id,
         _id: paidRoom._id,
       },
       {
         // reflect when a user ask for a refund
         tickets: {
           $inc: {
-            totalTicketsAvailable: 1,
-            totalSold: -1,
-          },
-          $pull: {
-            paidUsers: user_Id,
-            receiptId: paidRoom.receiptId,
+          "tickets.totalTicketsAvailable": 1,
+          "tickets.totalSold": -1,
+        },
+        $pull: {
+          "tickets.paidUsers": user_Id,
+          "tickets.receiptId": paidRoom.tickets.receiptId,
           },
           pricing: {
             $eq: {
@@ -211,34 +217,51 @@ export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   }
 };
 
-export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
+export const addTickets = async (roomId: string, payload: Partial<IPaidRooms>) => {
   try {
-    const room_Id = roomId as string;
-    const foundRoom = await Rooms.findById(room_Id);
+    const room_Id = String(roomId);
 
-    if (!foundRoom) throw new Error("Room not found");
+    const room = await Rooms.findById(room_Id).select("paidRoom");
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (!room.paidRoom) {
+      throw new Error("Paid room not found");
+    }
 
-    const paid_Room = await PaidRoom.create({
-      roomId: room_Id,
-      tickets: {
-        ticketsTotal: paidRoom.tickets.ticketsTotal,
-        $addToSet: {
-          pricing: paidRoom.tickets.pricing,
+    const incomingPricing = (payload?.tickets?.pricing || []) as any[];
+    if (!Array.isArray(incomingPricing) || incomingPricing.length === 0) {
+      throw new Error("At least one pricing tier is required");
+    }
+
+    const newPricing = incomingPricing.map((tier: any) => ({
+      ...tier,
+      sold: tier.sold ?? 0,
+    }));
+
+    const ticketsToAdd = newPricing.reduce((sum: number, tier: any) => sum + tier.total, 0);
+
+    if (ticketsToAdd <= 0) {
+      throw new Error("ticketsTotal must be greater than 0");
+    }
+
+    const updatedPaidRoom = await PaidRoom.findByIdAndUpdate(
+      room.paidRoom,
+      {
+        $push: { "tickets.pricing": { $each: newPricing } },
+        $inc: {
+          "tickets.ticketsTotal": ticketsToAdd,
+          "tickets.totalTicketsAvailable": ticketsToAdd,
         },
       },
-    });
+      { new: true }
+    );
 
-    if (!paid_Room) throw new Error("Paid room not created");
+    if (!updatedPaidRoom) {
+      throw new Error("Paid room not updated");
+    }
 
-    //update room
-    const updatedRoom = await Rooms.findByIdAndUpdate(room_Id, {
-      paid: true,
-      paidRoom: paid_Room._id,
-    });
-
-    if (!updatedRoom) throw new Error("Room not updated");
-
-    return paid_Room;
+    return updatedPaidRoom;
   } catch (err) {
     Logging.error(err);
     throw err;
