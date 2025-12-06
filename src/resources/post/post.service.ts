@@ -309,6 +309,11 @@ export const getNearbyPostsPaginated = async (
       .populate([
         { path: "comments", model: "Comments" },
         { path: "likes", model: "Likes" },
+        {
+          path: "user_Id",
+          model: "User",
+          select: "_id auth.username profile.firstName profile.avi",
+        },
       ]);
 
     return nearbyPosts;
@@ -389,9 +394,26 @@ export const getCommentsWithImages = async (posts: IPostDocument[]) => {
   try {
     const commentsWithImages = await Promise.all(
       posts.map(async (post, index) => {
-        const foundComment = await Comments.findById(post.comments[index]._id);
+        const foundComment = await Comments.findById(
+          post.comments[index]._id
+        ).populate([
+          {
+            path: "user_id",
+            model: "User",
+            select: "_id auth.username profile.firstName profile.avi",
+          },
+        ]);
+
+        const populatedUser = foundComment?.user_id as unknown as
+          | {
+              _id: mongoose.Types.ObjectId;
+              auth: { username: string };
+              profile: { firstName: string; avi: string };
+            }
+          | undefined;
+
         const Images = await getUserIMG(
-          foundComment?.user_id?.toString() as string
+          populatedUser?._id.toString() as string
         );
         Logging.log(`Images: ${JSON.stringify(Images)}`);
         return {
@@ -399,6 +421,7 @@ export const getCommentsWithImages = async (posts: IPostDocument[]) => {
           comments: post.comments.map((comment) => {
             return {
               ...comment,
+              user_id: populatedUser,
               userIMG: Images,
             };
           }),

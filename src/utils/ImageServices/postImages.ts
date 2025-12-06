@@ -144,6 +144,7 @@ export const listCheckImgUrlWithUser = async (posts: IPostDocument[]) => {
           url,
           post.content.name
         );
+        Logging.log(updatedPost);
 
         const userId = updatedPost?.user_Id?._id.toString() as string;
 
@@ -155,7 +156,9 @@ export const listCheckImgUrlWithUser = async (posts: IPostDocument[]) => {
         });
       }
 
-      const userIMGURL = await getUserIMG(post?.user_Id?.toString() as string);
+      const userIMGURL = await getUserIMG(
+        post?.user_Id?._id.toString() as string
+      );
 
       foundPostMedia.push({ ...post.toObject(), userImage: userIMGURL });
     }

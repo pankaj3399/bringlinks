@@ -58,6 +58,11 @@ const UserSchema = new Schema<IUserDocument>(
         maxlength: 30,
         trim: true,
       },
+      bio: {
+        type: String,
+        maxlength: 500,
+        trim: true,
+      },
       location: {
         radiusPreference: {
           type: Number,

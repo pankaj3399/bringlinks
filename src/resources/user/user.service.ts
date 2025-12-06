@@ -138,7 +138,7 @@ const registerUser = async (userData: Partial<IUsers>) => {
       (userData.state as string).trim().toLowerCase()
     );
 
-    if (!isFromAllowedState) {
+    if (isFromAllowedState === false) {
       throw new Error("Registration not available in your state");
     }
 
@@ -755,6 +755,7 @@ export const getUserRecommendRooms = async (
       "profile.location.currentLocation.coordinates": 1,
       "profile.location.radiusPreference": 1,
     }).lean();
+    Logging.log(user);
 
     if (!user) throw new Error("User not found");
 
@@ -874,6 +875,7 @@ export const getUserRecommendRooms = async (
     ];
 
     const results = await User.aggregate(aggregation);
+    Logging.log(results);
     return results;
   } catch (err: any) {
     Logging.error(err);

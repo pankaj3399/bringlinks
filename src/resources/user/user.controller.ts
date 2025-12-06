@@ -144,7 +144,7 @@ class UserController implements Controller {
       this.deleteAviPhoto
     );
     this.router.get(
-      `${this.path}/recommendedRooms/:userId`,
+      `${this.path}/rooms/recommended/:userId`,
       RequiredAuth,
       isUserAccount,
       this.getRecommendedRooms

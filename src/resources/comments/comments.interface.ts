@@ -1,4 +1,4 @@
-import mongoose, { Document } from "mongoose";
+import mongoose, { Document, Model } from "mongoose";
 import { StatsType } from "../post/post.interface";
 
 export interface IComments extends Document {
@@ -10,4 +10,14 @@ export interface IComments extends Document {
   likes: mongoose.Schema.Types.ObjectId[];
   commentReply: mongoose.Schema.Types.ObjectId[];
   stats: StatsType;
+}
+
+export interface ICommentsDocument extends IComments, Document {
+  // instance queries
+}
+
+export interface ICommentsModel extends Model<ICommentsDocument> {
+  // Schema Queries
+  findCommentById: (_id: string) => Promise<ICommentsDocument>;
+  deleteCommentById: (_id: string) => Promise<ICommentsDocument>;
 }

@@ -13,7 +13,7 @@ if (!stripeApiKey) {
 }
 
 const stripe = new Stripe(stripeApiKey, {
-  apiVersion: "2025-09-30.clover",
+  apiVersion: "2025-10-29.clover",
 });
 
 const router = Router();
@@ -34,7 +34,9 @@ router.post("/stripe/webhook", async (req: Request, res: Response) => {
   try {
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        await handleCheckoutCompleted(
+          event.data.object as Stripe.Checkout.Session
+        );
         break;
       case "account.updated":
         await handleAccountUpdated(event.data.object as Stripe.Account);
@@ -55,28 +57,33 @@ router.post("/stripe/webhook", async (req: Request, res: Response) => {
 
 async function handleAccountUpdated(account: Stripe.Account) {
   try {
-    const creator = await Creator.findOne({ stripeConnectAccountId: account.id });
+    const creator = await Creator.findOne({
+      stripeConnectAccountId: account.id,
+    });
     if (!creator) {
       Logging.log(`No creator found for Stripe account: ${account.id}`);
       return;
     }
 
-    const isReady = (
+    const isReady =
       account.details_submitted === true &&
       account.charges_enabled === true &&
       account.payouts_enabled === true &&
       account.capabilities?.card_payments === "active" &&
-      account.capabilities?.transfers === "active"
-    );
+      account.capabilities?.transfers === "active";
 
-    const newStatus = isReady ? StripeAccountStatus.ACTIVE : StripeAccountStatus.PENDING;
+    const newStatus = isReady
+      ? StripeAccountStatus.ACTIVE
+      : StripeAccountStatus.PENDING;
 
     if (creator.stripeAccountStatus !== newStatus) {
       await Creator.findByIdAndUpdate(creator._id, {
         stripeAccountStatus: newStatus,
       });
 
-      Logging.log(`Creator ${creator._id} Stripe status updated to: ${newStatus}`);
+      Logging.log(
+        `Creator ${creator._id} Stripe status updated to: ${newStatus}`
+      );
     }
   } catch (error: any) {
     Logging.error(`Handle account updated error: ${error.message}`);
@@ -86,29 +93,34 @@ async function handleAccountUpdated(account: Stripe.Account) {
 async function handleCapabilityUpdated(capability: Stripe.Capability) {
   try {
     const accountId = capability.account as string;
-    const creator = await Creator.findOne({ stripeConnectAccountId: accountId });
+    const creator = await Creator.findOne({
+      stripeConnectAccountId: accountId,
+    });
     if (!creator) {
       Logging.log(`No creator found for Stripe account: ${accountId}`);
       return;
     }
 
     const account = await stripe.accounts.retrieve(accountId);
-    const isReady = (
+    const isReady =
       account.details_submitted === true &&
       account.charges_enabled === true &&
       account.payouts_enabled === true &&
       account.capabilities?.card_payments === "active" &&
-      account.capabilities?.transfers === "active"
-    );
+      account.capabilities?.transfers === "active";
 
-    const newStatus = isReady ? StripeAccountStatus.ACTIVE : StripeAccountStatus.PENDING;
+    const newStatus = isReady
+      ? StripeAccountStatus.ACTIVE
+      : StripeAccountStatus.PENDING;
 
     if (creator.stripeAccountStatus !== newStatus) {
       await Creator.findByIdAndUpdate(creator._id, {
         stripeAccountStatus: newStatus,
       });
 
-      Logging.log(`Creator ${creator._id} Stripe status updated to: ${newStatus} after capability update`);
+      Logging.log(
+        `Creator ${creator._id} Stripe status updated to: ${newStatus} after capability update`
+      );
     }
   } catch (error: any) {
     Logging.error(`Handle capability updated error: ${error.message}`);
@@ -136,36 +148,47 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
+    const pricing = paidRoom.tickets?.pricing || ([] as any[]);
+    const idx = pricing.findIndex(
+      (p: any) => p.title === tierTitle || p.tiers === tierTitle
+    );
 
-    const pricing = paidRoom.tickets?.pricing || [] as any[];
-    const idx = pricing.findIndex((p: any) => p.title === tierTitle || p.tiers === tierTitle);
-    
     if (idx === -1) {
-      Logging.error(`Tier "${tierTitle}" not found! Available tiers: ${pricing.map((p: any) => p.title).join(', ')}`);
+      Logging.error(
+        `Tier "${tierTitle}" not found! Available tiers: ${pricing
+          .map((p: any) => p.title)
+          .join(", ")}`
+      );
       return;
     }
-    
+
     const target = pricing[idx];
-    
+
     if (target.available < quantity) {
-      Logging.error(`Insufficient tickets! Requested: ${quantity}, Available: ${target.available}`);
+      Logging.error(
+        `Insufficient tickets! Requested: ${quantity}, Available: ${target.available}`
+      );
       return;
     }
-        
+
     target.sold = (target.sold || 0) + quantity;
     target.available = Math.max(0, target.available - quantity);
-    
+
     const revenue = target.price * quantity;
-    paidRoom.tickets.totalRevenue = (paidRoom.tickets.totalRevenue || 0) + revenue;
-    
+    paidRoom.tickets.totalRevenue =
+      (paidRoom.tickets.totalRevenue || 0) + revenue;
+
     if (!paidRoom.tickets.receiptId) {
       paidRoom.tickets.receiptId = [];
     }
-    const pi = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    const pi =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id;
     if (pi) {
       (paidRoom.tickets.receiptId as any).push(pi);
     }
-    
+
     if (!paidRoom.tickets.paidUsers) {
       paidRoom.tickets.paidUsers = [];
     }
@@ -173,16 +196,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       (paidRoom.tickets.paidUsers as any).push(userId);
     }
 
-    paidRoom.markModified('tickets');
-    
+    paidRoom.markModified("tickets");
+
     await paidRoom.save();
 
     try {
       const ticketId = `ticket_${session.id}_${Date.now()}`;
       const entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
-      
-      Logging.log(`Entry QR code generated for user ${userId} for room ${roomId}`);
-      
+
+      Logging.log(
+        `Entry QR code generated for user ${userId} for room ${roomId}`
+      );
     } catch (qrError: any) {
       Logging.error(`Entry QR code generation error: ${qrError.message}`);
     }
@@ -190,10 +214,3 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
   }
 }
-
-
-
-
-
-
-

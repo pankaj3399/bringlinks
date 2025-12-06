@@ -1440,6 +1440,103 @@ export const addMediaImage = async (
   }
 };
 
+export const roomsHrFromNow = async (
+  userId: string,
+  lng: number,
+  ltd: number
+) => {
+  try {
+    //this shows you rooms an hour from now
+    const now = new Date();
+    const startDate = new Date(now.getTime() + 60 * 60 * 1000);
+
+    const foundedUser = await User.findOne({ _id: userId })
+      .select("-auth.password -role -refreshToken")
+      .lean();
+
+    if (!foundedUser) throw new Error("User not found");
+
+    const radiusPrefMeters =
+      foundedUser?.profile.location.radiusPreference * 1609.34;
+    const nearbyRooms = await Rooms.find({
+      // Rooms event_schedule that are up coming up later than now - a day before
+      "event_schedule.startDate": {
+        $gte: startDate,
+      },
+
+      // Rooms that are not private
+      event_privacy: {
+        $ne: RoomPrivacy.private,
+      },
+
+      // Rooms that are near the user's current location
+      event_location: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, ltd],
+          },
+          $maxDistance: radiusPrefMeters,
+        },
+      },
+    }).populate([
+      {
+        path: "paidRoom",
+        model: "PaidRooms",
+        select: "tickets.pricing",
+      },
+      {
+        path: "shares",
+        model: "Share",
+        select: "platform shareType shareUrl analytics createdAt",
+      },
+    ]);
+
+    return nearbyRooms;
+  } catch (err: any) {
+    Logging.error(`Error in getNearPost: ${err}`);
+    throw err;
+  }
+};
+
+export const getRooms35Miles = async (
+  userId: string,
+  lng: number,
+  ltd: number,
+  radius: number | undefined = 35
+) => {
+  try {
+    const foundedUser = await User.findOne({ _id: userId })
+      .select("-auth.password -role -refreshToken")
+      .lean();
+
+    if (!foundedUser) throw new Error("User not found");
+
+    const nearbyRooms = await Rooms.find({
+      // Rooms that are not private
+      event_privacy: {
+        $ne: RoomPrivacy.private,
+      },
+
+      // Rooms that are near the user's current location
+      event_location: {
+        $near: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, ltd],
+          },
+          $maxDistance: radius * 1609.34,
+        },
+      },
+    });
+
+    return nearbyRooms;
+  } catch (err: any) {
+    Logging.error(`Error in getNearPost: ${err}`);
+    throw err;
+  }
+};
+
 export {
   getARoom,
   getAllRooms,
