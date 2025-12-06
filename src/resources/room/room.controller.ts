@@ -37,6 +37,7 @@ import {
   getCreatorIMG,
   getAllUserEnteredRooms,
   getRoomsWithImages,
+  roomsHrFromNow,
 } from "./room.service";
 import {
   generateShareLinks,
@@ -121,9 +122,9 @@ class RoomController implements Controller {
     );
     // given a coordinate and userId return all rooms nearby 40 miles radius
     this.router.get(
-      `${this.path}/user/coordinates/:userId`,
+      `${this.path}/user/one-hr/:userId`,
       RequiredAuth,
-      this.searchRoomsByCoordinates
+      this.oneHrRooms
     );
     this.router.get(`${this.path}/allrooms`, RequiredAuth, this.getAllRooms);
     this.router.get(
@@ -888,14 +889,14 @@ class RoomController implements Controller {
     }
   };
 
-  private searchRoomsByCoordinates = async (
+  private oneHrRooms = async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { userId } = req.params;
-      const { lng, ltd } = req.query;
+      const { lng, ltd, radius } = req.query;
       if (!userId) return res.status(400).send("User Id is required");
       if (lng == null || ltd == null)
         return res.status(400).send("Location is needed");
@@ -906,11 +907,32 @@ class RoomController implements Controller {
         return res.status(400).send("Invalid location coordinates");
       }
 
-      const nearByRooms = await roomsNearBy(userId, lngNum, ltdNum);
-      if (!nearByRooms) return res.status(400).send(`room couldn't be found`);
+      const nearByRooms = await roomsHrFromNow(userId, lngNum, ltdNum);
+      if (!nearByRooms) return res.status(res.statusCode).send([]);
 
-      Logging.info(nearByRooms);
-      res.status(201).json(nearByRooms);
+      const chosenRadius = radius ? Number(radius) : undefined;
+
+      const rooms35miles = await roomsNearBy(
+        userId,
+        lngNum,
+        ltdNum,
+        chosenRadius
+      );
+
+      Logging.info(`rooms35miles: ${rooms35miles}`);
+      Logging.info(`nearByRooms: ${nearByRooms}`);
+
+      //remove duplicate rooms between rooms35miles and nearByRooms
+      const roomsFiltered = nearByRooms.filter((room) => {
+        return rooms35miles.every(
+          (room2) => room2._id.toString() !== room._id.toString()
+        );
+      });
+
+      const rooms35milesFiltered = roomsFiltered.concat(rooms35miles);
+
+      Logging.info(`roomsFiltered: ${roomsFiltered}`);
+      res.status(201).json(rooms35milesFiltered);
     } catch (err: any) {
       return next(new HttpException(res.statusCode, err.message));
     }

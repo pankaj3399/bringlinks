@@ -46,6 +46,7 @@ export interface IUserProfile {
   location: Location;
   privacy: ProfilePrivacy;
   demographic: Demo;
+  bio: string;
   bookmarks: bookmarkType[];
 }
 

@@ -7,7 +7,6 @@ import {
 export const creatorRegistration =
   Joi.object<ICreatorRegistrationRequest>().keys({
     userId: Joi.string().required(),
-    signupCode: Joi.string().length(6).alphanum().required(),
   });
 
 export const creatorSignup = Joi.object<ICreatorSignupRequest>().keys({

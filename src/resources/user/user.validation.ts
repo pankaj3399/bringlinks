@@ -40,6 +40,7 @@ const create = Joi.object<IUserDocument>().keys({
     firstName: Joi.string().min(3).max(30).required(),
     lastName: Joi.string().min(3).max(30).required(),
     birthDate: Joi.date().required(),
+    bio: Joi.string().min(3).max(500).optional(),
     occupation: Joi.string().min(3).max(30).required(),
     demographic: Joi.object<Demo>().keys({
       race: Joi.string()
@@ -126,6 +127,7 @@ const updateUser = Joi.object<IUserDocument>().keys({
   }),
   profile: Joi.object<IUserProfile>().keys({
     occupation: Joi.string().min(3).max(30),
+    bio: Joi.string().min(3).max(30).optional(),
     demographic: Joi.object<Demo>().keys({
       race: Joi.string()
         .valid(
