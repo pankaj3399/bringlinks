@@ -27,7 +27,6 @@ import Logging from "../../library/logging";
 import validationMiddleware from "../../middleware/val.middleware";
 import validate from "./user.validation";
 import adminValidation from "./admin/admin.validation";
-import RedisClientMiddleware from "../../middleware/redis.middleware";
 import {
   isUserAccount,
   isUserRefreshToken,
@@ -40,6 +39,7 @@ import { IRoles, IUsers } from "./user.interface";
 import { putS3Object } from "../../utils/ImageServices/user.Img";
 import { UploadedFile } from "express-fileupload";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
+import { getCreatorIMG } from "../room/room.service";
 const imgName = ImageNAME();
 
 class UserController implements Controller {
@@ -539,22 +539,39 @@ class UserController implements Controller {
       return next(new HttpException(res.statusCode, err.message));
     }
   };
+
   private getRecommendedRooms = async (
     req: Request,
     res: Response,
     next: NextFunction
   ): Promise<Response | void> => {
     try {
+      let recommendedRoomsWithCreatorIMG: any = [];
       const { userId } = req.params;
+      const { page, perPage } = req.query;
       if (!userId) return res.status(400).send("Id is required");
-      //Redis Layer
 
-      const recommendedRooms = await getUserRecommendRooms(userId);
+      const recommendedRooms = await getUserRecommendRooms(
+        userId,
+        Number(page),
+        Number(perPage)
+      );
 
       if (!recommendedRooms)
         return res.status(400).json({ message: "No recommend rooms found" });
 
-      res.status(200).json(recommendedRooms);
+      await Promise.all(
+        recommendedRooms.map(async (room) => {
+          const creatorIMG = await getCreatorIMG(room._id);
+          recommendedRoomsWithCreatorIMG.push({
+            ...room,
+            freshCreatorIMG: creatorIMG,
+          });
+        })
+      );
+
+      Logging.info(recommendedRoomsWithCreatorIMG);
+      res.status(200).json(recommendedRoomsWithCreatorIMG);
     } catch (err: any) {
       return next(new HttpException(res.statusCode, err.message));
     }

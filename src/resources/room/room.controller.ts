@@ -36,8 +36,11 @@ import {
   isEnteredRoom,
   getCreatorIMG,
   getAllUserEnteredRooms,
-  getRoomsWithImages,
   roomsHrFromNow,
+  buildFuzzyPattern,
+  searchUsers,
+  searchRooms,
+  filterRooms,
 } from "./room.service";
 import {
   generateShareLinks,
@@ -61,15 +64,11 @@ import {
   getPutObjectCommand,
 } from "../../utils/ImageServices/helperFunc.ts/room.Img";
 import { RequiredAuth } from "../../middleware/auth.middleware";
-import fileUpload, { UploadedFile } from "express-fileupload";
+import { UploadedFile } from "express-fileupload";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
-import {
-  listCheckRoomImgUrl,
-  uploadRoomImage,
-} from "../../utils/ImageServices/roomFlyer.Img";
+import { uploadRoomImage } from "../../utils/ImageServices/roomFlyer.Img";
 import mongoose from "mongoose";
-import { get } from "config";
-import { IRoomsDocument } from "./room.interface";
+import { Pagination, RoomFilters } from "./room.interface";
 var toId = mongoose.Types.ObjectId;
 
 class RoomController implements Controller {
@@ -275,7 +274,86 @@ class RoomController implements Controller {
       this.handleShareClick
     );
     this.router.get(`${this.path}/:roomId`, this.getRoomByIdPublic);
+    this.router.get(
+      `/search/:userId`,
+      RequiredAuth,
+      this.searchForRoomsOrUsers
+    );
+    this.router.get(
+      `${this.path}/:userId/filter`,
+      RequiredAuth,
+      this.getRoomsByFilter
+    );
   }
+
+  private searchForRoomsOrUsers = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const query = (req.query.q as string)?.trim();
+      const type = (req.query.type as string) || "all";
+      const limit = Math.min(parseInt(req.query.limit as string) || 10, 50);
+
+      if (query.length < 3) {
+        return res
+          .status(200)
+          .send({ users: "Query too short", rooms: "Query too short" });
+      }
+
+      const pattern = buildFuzzyPattern(query);
+
+      const [users, rooms] = await Promise.all([
+        type === "all" || type === "users" ? searchUsers(pattern, limit) : [],
+        type === "all" || type === "rooms" ? searchRooms(pattern, limit) : [],
+      ]);
+
+      return res.status(200).json({ users, rooms });
+    } catch (error: any) {
+      console.error("Search error:", error);
+      return next(new HttpException(400, error));
+    }
+  };
+
+  private getRoomsByFilter = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const filters: RoomFilters = {
+        timeStart: req.query.timeStart as string,
+        timeEnd: req.query.timeEnd as string,
+        priceMin: req.query.priceMin
+          ? parseFloat(req.query.priceMin as string)
+          : undefined,
+        priceMax: req.query.priceMax
+          ? parseFloat(req.query.priceMax as string)
+          : undefined,
+        dateStart: req.query.dateStart as string,
+        dateEnd: req.query.dateEnd as string,
+        miles: req.query.miles
+          ? parseFloat(req.query.miles as string)
+          : undefined,
+        lat: req.query.lat ? parseFloat(req.query.lat as string) : undefined,
+        lng: req.query.lng ? parseFloat(req.query.lng as string) : undefined,
+        eventType: req.query.eventType as string,
+      };
+
+      const pagination: Pagination = {
+        limit: Math.min(parseInt(req.query.limit as string) || 20, 100),
+        page: Math.max(parseInt(req.query.page as string) || 1, 1),
+      };
+
+      const result = await filterRooms(filters, pagination);
+
+      return res.status(200).json(result);
+    } catch (error: any) {
+      console.error("Filter error:", error);
+      return next(new HttpException(500, error.message));
+    }
+  };
 
   private uploadMediaIMG = async (
     req: Request,
@@ -875,6 +953,7 @@ class RoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
+      let enteredRoomsWithCreatorIMG: any = [];
       const { userId } = req.params;
       if (!userId) return res.status(400).send("User Id is required");
 
@@ -882,8 +961,18 @@ class RoomController implements Controller {
 
       if (!enteredRooms) return res.status(400).send(`room couldn't be found`);
 
-      Logging.info(enteredRooms);
-      res.status(200).json(enteredRooms);
+      await Promise.all(
+        enteredRooms.map(async (room) => {
+          const creatorIMG = await getCreatorIMG(room._id);
+          Logging.info(`creatorIMG: ${creatorIMG}`);
+          enteredRoomsWithCreatorIMG.push({
+            ...room,
+            freshCreatorIMG: creatorIMG,
+          });
+        })
+      );
+      Logging.info(enteredRoomsWithCreatorIMG);
+      res.status(200).json(enteredRoomsWithCreatorIMG);
     } catch (err: any) {
       return next(new HttpException(res.statusCode, err.message));
     }
@@ -897,6 +986,7 @@ class RoomController implements Controller {
     try {
       const { userId } = req.params;
       const { lng, ltd, radius } = req.query;
+      var roomsWithCreatorIMG: any = [];
       if (!userId) return res.status(400).send("User Id is required");
       if (lng == null || ltd == null)
         return res.status(400).send("Location is needed");
@@ -931,8 +1021,18 @@ class RoomController implements Controller {
 
       const rooms35milesFiltered = roomsFiltered.concat(rooms35miles);
 
+      await Promise.all(
+        rooms35milesFiltered.map(async (room) => {
+          const creatorIMG = await getCreatorIMG(room._id);
+          roomsWithCreatorIMG.push({
+            ...room.toObject(),
+            freshCreatorIMG: creatorIMG,
+          });
+        })
+      );
+
       Logging.info(`roomsFiltered: ${roomsFiltered}`);
-      res.status(201).json(rooms35milesFiltered);
+      res.status(201).json(roomsWithCreatorIMG);
     } catch (err: any) {
       return next(new HttpException(res.statusCode, err.message));
     }
@@ -972,10 +1072,7 @@ class RoomController implements Controller {
       );
       if (!nearByRooms) return res.status(res.statusCode).send([]);
 
-      Logging.info(nearByRooms);
-      const nearByRoomsWithImages = await getRoomsWithImages(nearByRooms);
-
-      res.status(res.statusCode).json(nearByRoomsWithImages);
+      res.status(res.statusCode).json(nearByRooms);
     } catch (err: any) {
       return next(new HttpException(res.statusCode, err.message));
     }

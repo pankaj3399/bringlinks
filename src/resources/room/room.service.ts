@@ -5,6 +5,8 @@ import Logging from "../../library/logging";
 import {
   IMGNames,
   IRoomsDocument,
+  Pagination,
+  RoomFilters,
   RoomPrivacy,
   SpecialGuestType,
   sponsorType,
@@ -60,6 +62,99 @@ const getARoom = async (id: string) => {
     throw new Error(err.message);
   }
 };
+
+export function buildFuzzyPattern(query: string): RegExp {
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const fuzzy = escaped.split("").join(".?");
+  return new RegExp(fuzzy, "i");
+}
+
+/**
+ * Search users
+ */
+export async function searchUsers(pattern: RegExp, limit: number) {
+  const users = await User.find(
+    {
+      $or: [
+        { "auth.username": pattern },
+        { "auth.email": pattern },
+        { "profile.firstName": pattern },
+        { "profile.lastName": pattern },
+      ],
+    },
+    {
+      "auth.username": 1,
+      "profile.firstName": 1,
+      "profile.lastName": 1,
+      "profile.avi": 1,
+    }
+  )
+    .limit(limit)
+    .lean();
+
+  return users.map((u: any) => ({
+    _id: u._id,
+    username: u.auth?.username || "",
+    firstName: u.profile?.firstName || "",
+    lastName: u.profile?.lastName || "",
+    avi: u.profile?.avi || null,
+  }));
+}
+
+/**
+ * Search rooms
+ */
+export async function searchRooms(pattern: RegExp, limit: number) {
+  const now = new Date();
+
+  const rooms = await Rooms.find(
+    {
+      "event_schedule.endDate": { $gt: now },
+      $or: [
+        { deletedAt: null },
+        { deletedAt: { $exists: false } },
+        { event_name: pattern },
+        { event_type: pattern },
+        { event_typeOther: pattern },
+        { event_description: pattern },
+      ],
+    },
+    {
+      event_name: 1,
+      event_type: 1,
+      event_typeOther: 1,
+      event_description: 1,
+      event_flyer_img: 1,
+      event_schedule: 1,
+      created_user: 1,
+    }
+  )
+    .populate({
+      path: "created_user",
+      select: "auth.username profile.firstName profile.avi",
+    })
+    .sort({ "event_schedule.startDate": 1 })
+    .limit(limit)
+    .lean();
+
+  return rooms.map((r: any) => ({
+    _id: r._id,
+    event_name: r.event_name,
+    event_type: r.event_type,
+    event_typeOther: r.event_typeOther,
+    event_description: r.event_description,
+    event_flyer_img: r.event_flyer_img,
+    event_schedule: r.event_schedule,
+    created_user: r.created_user
+      ? {
+          _id: r.created_user._id,
+          username: r.created_user.auth?.username || "",
+          firstName: r.created_user.profile?.firstName || "",
+          avi: r.created_user.profile?.avi || null,
+        }
+      : null,
+  }));
+}
 
 const getRoomBy = async (room: IRoomsDocument, path: string) => {
   const _id = room._id as string;
@@ -1015,7 +1110,15 @@ export const getAllUserEnteredRooms = async (userId: string) => {
     );
     if (!foundedUser) throw new Error("User not found");
 
-    const enteredRooms = await Rooms.find({ entered_id: userIdString }).lean();
+    const enteredRooms = await Rooms.find({ entered_id: userIdString })
+      .populate([
+        {
+          path: "created_user",
+          model: "User",
+          select: "_id auth.username profile.firstName profile.avi",
+        },
+      ])
+      .lean();
 
     if (!enteredRooms) throw new Error("Room not found");
 
@@ -1061,6 +1164,18 @@ export const roomsNearByPaginated = async (
         },
       },
     })
+      .populate([
+        {
+          path: "created_user",
+          model: "User",
+          select: "_id auth.username profile.firstName profile.avi",
+        },
+        {
+          path: "paidRoom",
+          model: "PaidRooms",
+          select: "_id tickets.pricing",
+        },
+      ])
       .skip(skip)
       .limit(limit);
 
@@ -1159,6 +1274,11 @@ const roomsNearBy = async (
         path: "paidRoom",
         model: "PaidRooms",
         select: "tickets.pricing",
+      },
+      {
+        path: "created_user",
+        model: "User",
+        select: "_id auth.username profile.firstName profile.avi",
       },
       {
         path: "shares",
@@ -1486,6 +1606,11 @@ export const roomsHrFromNow = async (
         select: "tickets.pricing",
       },
       {
+        path: "created_user",
+        model: "User",
+        select: "_id auth.username profile.firstName profile.avi",
+      },
+      {
         path: "shares",
         model: "Share",
         select: "platform shareType shareUrl analytics createdAt",
@@ -1536,6 +1661,164 @@ export const getRooms35Miles = async (
     throw err;
   }
 };
+/**
+ * Main filter function
+ */
+export async function filterRooms(
+  filters: RoomFilters,
+  pagination: Pagination
+) {
+  const { limit, page } = pagination;
+  const skip = (page - 1) * limit;
+
+  const query = buildQuery(filters);
+
+  let rooms = await Rooms.find(query)
+    .populate({
+      path: "created_user",
+      select: "auth.username profile.firstName profile.avi",
+    })
+    .populate({
+      path: "paidRoom",
+      select: "tickets.pricing",
+    })
+    .sort({ "event_schedule.startDate": 1 })
+    .lean();
+
+  // Apply time filter
+  if (filters.timeStart || filters.timeEnd) {
+    rooms = filterByTime(rooms, filters.timeStart, filters.timeEnd);
+  }
+
+  // Apply price filter
+  if (filters.priceMin !== undefined || filters.priceMax !== undefined) {
+    rooms = filterByPrice(
+      rooms,
+      filters.priceMin || 0,
+      filters.priceMax || 120000
+    );
+  }
+
+  const total = rooms.length;
+  const paginatedRooms = rooms.slice(skip, skip + limit);
+
+  return {
+    rooms: formatRooms(paginatedRooms),
+    pagination: {
+      total,
+      page,
+      limit,
+      pages: Math.ceil(total / limit),
+    },
+  };
+}
+
+/**
+ * Build Mongoose query
+ */
+function buildQuery(filters: RoomFilters): any {
+  const query: any = {
+    $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+  };
+
+  const startDate = filters.dateStart
+    ? new Date(filters.dateStart)
+    : new Date();
+  const endDate = filters.dateEnd
+    ? new Date(filters.dateEnd)
+    : new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000);
+
+  query["event_schedule.startDate"] = { $gte: startDate, $lte: endDate };
+
+  if (filters.eventType) {
+    const regex = new RegExp(filters.eventType, "i");
+    query.$or = [{ event_type: regex }, { event_typeOther: regex }];
+  }
+
+  if (filters.miles && filters.lat && filters.lng) {
+    const maxDistance = Math.min(filters.miles, 100) * 1609.34;
+
+    query.event_location = {
+      $nearSphere: {
+        $geometry: {
+          type: "Point",
+          coordinates: [filters.lng, filters.lat],
+        },
+        $maxDistance: maxDistance,
+      },
+    };
+  }
+
+  return query;
+}
+
+/**
+ * Filter rooms by time of day
+ */
+function filterByTime(
+  rooms: any[],
+  timeStart?: string,
+  timeEnd?: string
+): any[] {
+  const startHour = timeStart ? parseInt(timeStart.split(":")[0]) : 0;
+  const endHour = timeEnd ? parseInt(timeEnd.split(":")[0]) : 23;
+
+  return rooms.filter((room) => {
+    const eventHour = new Date(room.event_schedule.startDate).getHours();
+    return eventHour >= startHour && eventHour <= endHour;
+  });
+}
+
+/**
+ * Filter rooms by price range
+ */
+function filterByPrice(
+  rooms: any[],
+  priceMin: number,
+  priceMax: number
+): any[] {
+  return rooms.filter((room) => {
+    const minPrice = getMinPrice(room.paidRoom);
+    return minPrice >= priceMin && minPrice <= priceMax;
+  });
+}
+
+/**
+ * Get minimum price from paidRoom
+ */
+function getMinPrice(paidRoom: any): number {
+  if (!paidRoom?.tickets?.pricing?.length) return 0;
+
+  const prices = paidRoom.tickets.pricing.map((tier: any) => tier.price);
+  return Math.min(...prices);
+}
+
+/**
+ * Format rooms for response
+ */
+function formatRooms(rooms: any[]) {
+  return rooms.map((r) => ({
+    _id: r._id,
+    event_name: r.event_name,
+    event_type: r.event_type,
+    event_typeOther: r.event_typeOther,
+    event_description: r.event_description,
+    event_flyer_img: r.event_flyer_img,
+    event_schedule: r.event_schedule,
+    event_location_address: r.event_location_address,
+    paid: r.paid,
+    minPrice: getMinPrice(r.paidRoom),
+    pricing: r.paidRoom?.tickets?.pricing || [],
+    created_user: r.created_user
+      ? {
+          _id: r.created_user._id,
+          username: r.created_user.auth?.username || "",
+          firstName: r.created_user.profile?.firstName || "",
+          avi: r.created_user.profile?.avi || null,
+        }
+      : null,
+  }));
+}
 
 export {
   getARoom,

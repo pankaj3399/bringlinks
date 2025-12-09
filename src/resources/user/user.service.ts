@@ -18,6 +18,7 @@ import { use } from "passport";
 import { parseAllowedStates } from "../../utils/parseStates/allowedStates";
 import mongoose from "mongoose";
 import Rooms from "../room/room.model";
+import { RoomTypes } from "../room/room.interface";
 
 const getUserUsername = async (username: string) => {
   try {
@@ -650,7 +651,9 @@ export const deleteIMG = async (id: string) => {
 
 export const getUserRecommendRooms = async (
   userId: string,
-  filterByLocation = false
+  page: number,
+  perPage: number,
+  filterByLocation: boolean | undefined = false
 ) => {
   try {
     const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -658,9 +661,10 @@ export const getUserRecommendRooms = async (
     const user = await User.findById(userObjectId, {
       "profile.location.currentLocation.coordinates": 1,
       "profile.location.radiusPreference": 1,
-      "following": 1,
-      "followers": 1,
-      "enteredRooms": 1,
+      following: 1,
+      followers: 1,
+      enteredRooms: 1,
+      userPreferences: 1,
     }).lean();
     Logging.log(user);
 
@@ -681,7 +685,7 @@ export const getUserRecommendRooms = async (
     const followerIds = (user.followers || []).map(
       (id: any) => new mongoose.Types.ObjectId(id)
     );
-    
+
     let networkUserIds = [
       ...new Set([
         ...followingIds.map((id) => id.toString()),
@@ -719,17 +723,26 @@ export const getUserRecommendRooms = async (
       );
     }
 
-    if (networkUserIds.length === 0) {
+    // Get event types from user's entered rooms
+    const enteredRoomTypes = await getEnteredRoomEventTypes(userEnteredRoomIds);
+
+    // Build preference-based search conditions
+    const preferenceConditions = buildPreferenceConditions(
+      user.userPreferences,
+      enteredRoomTypes
+    );
+
+    const hasNetwork = networkUserIds.length > 0;
+    const hasPreferences = preferenceConditions.length > 0;
+
+    if (!hasNetwork && !hasPreferences) {
       Logging.info(
-        `User ${userId} has no network (following/followers or second-degree)`
+        `User ${userId} has no network and no preferences - returning empty`
       );
       return [];
     }
 
     const roomMatchConditions: any[] = [
-      {
-        entered_id: { $in: networkUserIds },
-      },
       {
         "event_schedule.endDate": { $gt: now },
       },
@@ -737,6 +750,24 @@ export const getUserRecommendRooms = async (
         $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
       },
     ];
+
+    const networkOrPreferenceConditions: any[] = [];
+
+    if (hasNetwork) {
+      networkOrPreferenceConditions.push({
+        entered_id: { $in: networkUserIds },
+      });
+    }
+
+    if (hasPreferences) {
+      networkOrPreferenceConditions.push({
+        $or: preferenceConditions,
+      });
+    }
+
+    roomMatchConditions.push({
+      $or: networkOrPreferenceConditions,
+    });
 
     if (filterByLocation) {
       if (lat == null || lng == null) {
@@ -779,8 +810,9 @@ export const getUserRecommendRooms = async (
         },
       ])
       .lean()
-      .sort({ "event_schedule.startDate": 1 })
-      .limit(50);
+      .sort({ "event_schedule.startDate": 1, "stats.score": -1 })
+      .skip(page * perPage - perPage)
+      .limit(perPage);
 
     Logging.info(
       `Found ${recommendedRooms.length} recommended rooms for user ${userId}`
@@ -792,6 +824,96 @@ export const getUserRecommendRooms = async (
     throw err;
   }
 };
+
+/**
+ * Fetches event_type and event_typeOther from user's entered rooms
+ */
+async function getEnteredRoomEventTypes(
+  enteredRoomIds: mongoose.Types.ObjectId[]
+): Promise<{ eventTypes: RoomTypes[]; eventTypeOthers: string[] }> {
+  if (!enteredRoomIds.length) {
+    return { eventTypes: [], eventTypeOthers: [] };
+  }
+
+  const enteredRooms = await Rooms.find(
+    { _id: { $in: enteredRoomIds } },
+    { event_type: 1, event_typeOther: 1 }
+  ).lean();
+
+  const eventTypes: RoomTypes[] = [];
+  const eventTypeOthers: string[] = [];
+
+  for (const room of enteredRooms) {
+    if (room.event_type && !eventTypes.includes(room.event_type)) {
+      eventTypes.push(room.event_type);
+    }
+    if (
+      room.event_typeOther &&
+      !eventTypeOthers.includes(room.event_typeOther)
+    ) {
+      eventTypeOthers.push(room.event_typeOther);
+    }
+  }
+
+  return { eventTypes, eventTypeOthers };
+}
+
+/**
+ * Builds MongoDB query conditions based on user preferences AND entered room history
+ */
+function buildPreferenceConditions(
+  userPreferences?: IUserPreferences,
+  enteredRoomTypes?: { eventTypes: RoomTypes[]; eventTypeOthers: string[] }
+): any[] {
+  const conditions: any[] = [];
+
+  // From explicit user preferences
+  if (userPreferences?.favoriteTypesOfRooms?.length) {
+    for (const pref of userPreferences.favoriteTypesOfRooms) {
+      if (pref.title) {
+        conditions.push({ event_type: pref.title });
+      }
+
+      if (pref.name) {
+        const escapedName = escapeRegex(pref.name);
+        const regexPattern = new RegExp(escapedName, "i");
+
+        conditions.push({ event_typeOther: regexPattern });
+        conditions.push({ event_description: regexPattern });
+      }
+    }
+  }
+
+  // From entered rooms history
+  if (enteredRoomTypes) {
+    // Match rooms with same event_type as previously entered
+    if (enteredRoomTypes.eventTypes.length > 0) {
+      conditions.push({
+        event_type: { $in: enteredRoomTypes.eventTypes },
+      });
+    }
+
+    // Match rooms with similar event_typeOther (partial match)
+    for (const otherType of enteredRoomTypes.eventTypeOthers) {
+      if (otherType) {
+        const escapedType = escapeRegex(otherType);
+        const regexPattern = new RegExp(escapedType, "i");
+
+        conditions.push({ event_typeOther: regexPattern });
+        conditions.push({ event_description: regexPattern });
+      }
+    }
+  }
+
+  return conditions;
+}
+
+/**
+ * Escapes special regex characters in a string
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 export {
   getUserUsername,

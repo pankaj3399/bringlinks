@@ -5,7 +5,10 @@ import Creator from "./creator.model";
 import Logging from "../../../library/logging";
 import { StripeAccountStatus } from "./creator.interface";
 import PaidRoom from "../../room/paidRooms/paidRoom.model";
+import Rooms from "../../room/room.model";
 import { createEntryQRCode } from "../../room/room.service";
+import UserReceipt from "../../receipt/receipt.model";
+import { PaymentStatus } from "../../receipt/receipt.interface";
 
 const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
 if (!stripeApiKey) {
@@ -200,15 +203,52 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     await paidRoom.save();
 
+    // Add user to the Room's entered_id array
     try {
-      const ticketId = `ticket_${session.id}_${Date.now()}`;
-      const entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
+      await Rooms.updateOne(
+        { _id: roomId },
+        { $addToSet: { entered_id: userId } }
+      );
+      Logging.log(`User ${userId} added to entered_id for room ${roomId}`);
+    } catch (roomError: any) {
+      Logging.error(`Failed to add user to entered_id: ${roomError.message}`);
+    }
 
+    // Generate QR code and create UserReceipt
+    const ticketId = `ticket_${session.id}_${Date.now()}`;
+    let entryQRCode = "";
+
+    try {
+      entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
       Logging.log(
         `Entry QR code generated for user ${userId} for room ${roomId}`
       );
     } catch (qrError: any) {
       Logging.error(`Entry QR code generation error: ${qrError.message}`);
+    }
+
+    // Create UserReceipt document
+    try {
+      const userReceipt = await UserReceipt.create({
+        userId,
+        roomId,
+        stripePaymentIntentId: pi || "",
+        stripeSessionId: session.id,
+        tierTitle: target.title,
+        tierType: target.tiers,
+        quantity,
+        unitPrice: target.price,
+        totalAmount: revenue,
+        entryQRCode,
+        ticketId,
+        status: PaymentStatus.COMPLETED,
+      });
+
+      Logging.log(
+        `UserReceipt created for user ${userId}, room ${roomId}, receipt: ${userReceipt._id}`
+      );
+    } catch (receiptError: any) {
+      Logging.error(`Failed to create UserReceipt: ${receiptError.message}`);
     }
   } catch (error: any) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
