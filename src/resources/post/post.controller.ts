@@ -237,7 +237,7 @@ class PostController implements Controller {
       res.status(200).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private addPostViewStats = async (
@@ -257,7 +257,7 @@ class PostController implements Controller {
       res.status(200).json(updatedPost);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private getUserPost = async (
@@ -276,7 +276,7 @@ class PostController implements Controller {
       res.status(200).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private createAPost = async (
@@ -303,7 +303,7 @@ class PostController implements Controller {
       res.status(201).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private uploadPostMedia = async (
@@ -340,7 +340,7 @@ class PostController implements Controller {
 
       res.status(200).json({ signedUrl, fileName });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -537,7 +537,7 @@ class PostController implements Controller {
       res.status(200).json(commentsWithImages);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err));
+      return next(new HttpException(400, err));
     }
   };
   private comment = async (
@@ -572,7 +572,7 @@ class PostController implements Controller {
       }
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private deleteAComment = async (
@@ -593,7 +593,7 @@ class PostController implements Controller {
       res.status(200).send({ message: "Comment deleted" });
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private editAComment = async (
@@ -614,7 +614,7 @@ class PostController implements Controller {
       res.status(200).json(req.body);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private getUserLikes = async (
@@ -664,7 +664,7 @@ class PostController implements Controller {
         shareLinks,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -706,7 +706,7 @@ class PostController implements Controller {
         platform: result.platform,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -733,7 +733,7 @@ class PostController implements Controller {
         analytics,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -768,7 +768,7 @@ class PostController implements Controller {
 
       res.redirect(originalUrl);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private retrieveNearbyRoomPostMedia = async (
@@ -794,7 +794,7 @@ class PostController implements Controller {
 
       return res.status(200).json(nearbyPostsMedia);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private retrieveNearbyPostMedia = async (
@@ -822,7 +822,7 @@ class PostController implements Controller {
 
       return res.status(200).send(nearbyPostsMedia);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private retrieveUserPostMedia = async (
@@ -843,7 +843,7 @@ class PostController implements Controller {
 
       return res.status(200).send(foundPostMedia);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private retrieveRoomPostMedia = async (
@@ -864,7 +864,7 @@ class PostController implements Controller {
 
       return res.status(200).send(foundPostMedia);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private retrieveOneRoomPostMedia = async (
@@ -891,7 +891,7 @@ class PostController implements Controller {
 
       return res.status(200).send(foundPostMedia);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

@@ -47,7 +47,7 @@ class FriendsController implements Controller {
 
       res.status(201).send(addedFriend);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -65,7 +65,7 @@ class FriendsController implements Controller {
 
       res.status(200).send(removedFriend);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -83,7 +83,7 @@ class FriendsController implements Controller {
 
       res.status(200).send(foundedFriends);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

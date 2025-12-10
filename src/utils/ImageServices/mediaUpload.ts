@@ -84,6 +84,7 @@ export const getMediaSignedUrl = async (
   expiresIn: number = 3600
 ): Promise<string> => {
   try {
+    if (undefined === s3Key) return "Image name is invalid";
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,
       Key: s3Key,

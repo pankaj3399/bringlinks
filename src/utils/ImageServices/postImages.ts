@@ -85,7 +85,8 @@ export const getMediaSignedUrl = async (
 ): Promise<string> => {
   try {
     Logging.log(`s3Key: ${s3Key}`);
-    if (!s3Key.includes("media")) return "s3Key is invalid";
+    if (undefined === s3Key || !s3Key.includes("media"))
+      return "s3Key is invalid";
 
     const command = new GetObjectCommand({
       Bucket: BUCKET_NAME,

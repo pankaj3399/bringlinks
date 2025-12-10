@@ -27,7 +27,8 @@ export const uploadRoomImage = async (command: PutObjectCommand) => {
 };
 export const retrieveRoomIMG = async (imgName: string) => {
   try {
-    Logging.log(imgName);
+    if (undefined === imgName) return "imgName is invalid";
+
     const command = new GetObjectCommand({
       Bucket,
       Key: imgName,

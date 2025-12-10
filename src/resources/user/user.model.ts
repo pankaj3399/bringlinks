@@ -213,10 +213,6 @@ const UserSchema = new Schema<IUserDocument>(
         return user.role === IRoles.CREATOR ? true : false;
       },
     },
-    wallet: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Wallet",
-    },
     followers: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -248,6 +244,7 @@ const UserSchema = new Schema<IUserDocument>(
     isVerified: { type: Boolean, default: false },
     // appleId: { type: String },
     googleId: { type: String },
+    signupCode: { type: String },
   },
   { timestamps: true, minimize: false }
 );

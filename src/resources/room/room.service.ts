@@ -92,12 +92,23 @@ export async function searchUsers(pattern: RegExp, limit: number) {
     .limit(limit)
     .lean();
 
+  //get users img
+  await Promise.all(
+    users.map(async (u) => {
+      let userIMG;
+      if (u.profile.avi) {
+        userIMG = await getUserIMG(u._id.toString());
+        u.profile.avi.aviUrl = userIMG;
+      }
+    })
+  );
+
   return users.map((u: any) => ({
     _id: u._id,
     username: u.auth?.username || "",
     firstName: u.profile?.firstName || "",
     lastName: u.profile?.lastName || "",
-    avi: u.profile?.avi || null,
+    avi: u.profile?.avi || { aviUrl: "", aviName: "" },
   }));
 }
 
@@ -129,13 +140,37 @@ export async function searchRooms(pattern: RegExp, limit: number) {
       created_user: 1,
     }
   )
-    .populate({
-      path: "created_user",
-      select: "auth.username profile.firstName profile.avi",
-    })
+    .populate([
+      {
+        path: "created_user",
+        model: "User",
+        select:
+          "auth.username profile.firstName profile.avi.aviUrl profile.avi.aviName",
+      },
+      {
+        path: "paidRoom",
+        model: "PaidRooms",
+        select: "tickets.pricing",
+      },
+    ])
     .sort({ "event_schedule.startDate": 1 })
     .limit(limit)
     .lean();
+
+  //get rooms img
+  await Promise.all(
+    rooms.map(async (r) => {
+      let roomFlyerIMG;
+      let creatorIMG;
+      if (!r.event_flyer_img) roomFlyerIMG = "No Avatar";
+      if (!(r.created_user as any).profile.avi) creatorIMG = "No Avatar";
+      if ((r.created_user as any).profile.avi) {
+        (r.created_user as any).profile.avi.aviUrl = creatorIMG;
+      }
+      roomFlyerIMG = await retrieveRoomIMG(r.event_flyer_img.name);
+      r.event_flyer_img.url = roomFlyerIMG;
+    })
+  );
 
   return rooms.map((r: any) => ({
     _id: r._id,
@@ -150,7 +185,7 @@ export async function searchRooms(pattern: RegExp, limit: number) {
           _id: r.created_user._id,
           username: r.created_user.auth?.username || "",
           firstName: r.created_user.profile?.firstName || "",
-          avi: r.created_user.profile?.avi || null,
+          avi: r.created_user.profile?.avi || { aviUrl: "", aviName: "" },
         }
       : null,
   }));

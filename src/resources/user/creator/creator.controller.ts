@@ -110,7 +110,7 @@ class CreatorController implements Controller {
         ...result,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -132,7 +132,7 @@ class CreatorController implements Controller {
         creator,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -155,7 +155,7 @@ class CreatorController implements Controller {
         reviews,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -172,7 +172,7 @@ class CreatorController implements Controller {
       }
       res.status(200).json({ success: true, creator });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -195,7 +195,7 @@ class CreatorController implements Controller {
         creator: updatedCreator,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -212,7 +212,7 @@ class CreatorController implements Controller {
       const eligibility = await canCreatePaidRooms(userId);
       res.status(200).json({ success: true, ...eligibility });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -229,7 +229,7 @@ class CreatorController implements Controller {
       const earnings = await getCreatorEarnings(userId);
       res.status(200).json({ success: true, earnings });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -257,7 +257,7 @@ class CreatorController implements Controller {
         stripeConnect,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -274,7 +274,7 @@ class CreatorController implements Controller {
       const status = await getStripeConnectStatus(userId);
       res.status(200).json({ success: true, stripeConnect: status });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -295,7 +295,7 @@ class CreatorController implements Controller {
         stripeConnect: result,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

@@ -40,6 +40,7 @@ import { putS3Object } from "../../utils/ImageServices/user.Img";
 import { UploadedFile } from "express-fileupload";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
 import { getCreatorIMG } from "../room/room.service";
+import { retrieveRoomIMG } from "../../utils/ImageServices/roomFlyer.Img";
 const imgName = ImageNAME();
 
 class UserController implements Controller {
@@ -156,14 +157,14 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const [createdUser, token, refreshToken] = await registerUser(
+      const [createdUser, token] = await registerUser(
         req.body as unknown as Partial<IUsers>
       );
 
       res.cookie(validateEnv.COOKIE, token);
-      res.status(201).send({ createdUser, token, refreshToken });
+      res.status(201).send({ createdUser, token });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err));
     }
   };
 
@@ -173,17 +174,16 @@ class UserController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const [createdAdmin, token, refreshToken] = await registerAdmin(req.body);
+      const [createdAdmin, token] = await registerAdmin(req.body);
 
       res.cookie(validateEnv.COOKIE, token);
       res.status(201).send({
         createdAdmin,
         token,
-        refreshToken,
         message: "Admin created successfully",
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err));
     }
   };
   private requestPasswordChange = async (
@@ -198,7 +198,7 @@ class UserController implements Controller {
 
       res.status(200).send("Email Sent");
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -216,7 +216,7 @@ class UserController implements Controller {
       res.cookie(validateEnv.COOKIE, token);
       res.status(200).json({ foundUser, token, refreshToken });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private updateUser = async (
@@ -235,7 +235,7 @@ class UserController implements Controller {
 
       res.status(201).json(updatedUser);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private updateUserPreferences = async (
@@ -258,7 +258,7 @@ class UserController implements Controller {
 
       res.status(200).json(updatedUser);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private getUserById = async (
@@ -277,7 +277,7 @@ class UserController implements Controller {
       res.status(200).json(foundUser);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private getUserByUsername = async (
@@ -296,7 +296,7 @@ class UserController implements Controller {
       res.status(200).json(foundUser);
     } catch (err: any) {
       Logging.error(err);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private refreshToken = async (
@@ -322,7 +322,7 @@ class UserController implements Controller {
       res.status(201).json({ token: newToken, refreshToken: freshToken });
     } catch (err: any) {
       Logging.error(err.message);
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private logout = async (
@@ -341,7 +341,7 @@ class UserController implements Controller {
       res.clearCookie(validateEnv.COOKIE);
       res.status(200).send({ message: "Logged out successfully", user });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private getSchedule = async (
@@ -359,7 +359,7 @@ class UserController implements Controller {
       Logging.info(foundSchedule);
       res.status(200).json(foundSchedule);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private deactivateUser = async (
@@ -379,7 +379,7 @@ class UserController implements Controller {
       res.clearCookie(config.get<string>("cookie"));
       res.status(200).send(deletedUser._id);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -413,7 +413,7 @@ class UserController implements Controller {
 
       res.status(200).send({ token, user });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private followAUser = async (
@@ -432,7 +432,7 @@ class UserController implements Controller {
           .json({ message: "User not able to be followed, try again" });
       res.status(200).json(followed);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private unFollowerAUser = async (
@@ -452,7 +452,7 @@ class UserController implements Controller {
           .json({ message: "User not able to be unfollowed, try again" });
       res.status(200).json(followed);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private uploadIMG = async (
@@ -536,7 +536,7 @@ class UserController implements Controller {
 
       res.status(200).send({ success: true });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -562,10 +562,13 @@ class UserController implements Controller {
 
       await Promise.all(
         recommendedRooms.map(async (room) => {
+          let roomFlyerIMG;
           const creatorIMG = await getCreatorIMG(room._id);
+          roomFlyerIMG = await retrieveRoomIMG(room.event_flyer_img.name);
           recommendedRoomsWithCreatorIMG.push({
             ...room,
             freshCreatorIMG: creatorIMG,
+            roomFlyerIMG,
           });
         })
       );
@@ -573,7 +576,7 @@ class UserController implements Controller {
       Logging.info(recommendedRoomsWithCreatorIMG);
       res.status(200).json(recommendedRoomsWithCreatorIMG);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

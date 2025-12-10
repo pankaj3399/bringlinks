@@ -150,26 +150,26 @@ class PaidRoomController implements Controller {
         return title === normalizedTier || tierEnum === normalizedTier;
       });
       if (!selected) return res.status(400).json({ message: "Tier not found" });
-      
+
       if (selected.available <= 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
           message: "This tier is sold out",
           reason: "sold_out",
-          tier: selected.title
+          tier: selected.title,
         });
       }
-      
+
       if (selected.available < quantity) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
           message: `Only ${selected.available} tickets available for ${selected.title}`,
           reason: "insufficient_tickets",
           available: selected.available,
-          requested: quantity
+          requested: quantity,
         });
       }
-      
+
       const ticketAmount = selected.price;
 
       const metadata = {
@@ -198,15 +198,13 @@ class PaidRoomController implements Controller {
         metadata,
       } as any);
 
-      return res
-        .status(200)
-        .json({
-          success: true,
-          checkoutSessionId: session.id,
-          url: session.url,
-        });
+      return res.status(200).json({
+        success: true,
+        checkoutSessionId: session.id,
+        url: session.url,
+      });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -228,7 +226,7 @@ class PaidRoomController implements Controller {
       );
       return res.status(200).json({ success: true, url: loginLink.url });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -269,12 +267,10 @@ class PaidRoomController implements Controller {
       }
 
       if (amountCents > availableCents) {
-        return res
-          .status(400)
-          .json({
-            message: "Payout amount exceeds available balance",
-            availableCents,
-          });
+        return res.status(400).json({
+          message: "Payout amount exceeds available balance",
+          availableCents,
+        });
       }
 
       const payout = await StripeService.createPayout(
@@ -284,7 +280,7 @@ class PaidRoomController implements Controller {
       );
       return res.status(200).json({ success: true, payout });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -306,7 +302,7 @@ class PaidRoomController implements Controller {
       );
       return res.status(200).json({ success: true, balance });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -391,7 +387,7 @@ class PaidRoomController implements Controller {
         qrCode: qrCode,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -413,7 +409,7 @@ class PaidRoomController implements Controller {
 
       res.status(200).json(foundPaidRoom);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
   private vaultCard = async (
@@ -437,7 +433,7 @@ class PaidRoomController implements Controller {
         .status(503)
         .json({ message: "Card vaulting temporarily disabled" });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -456,7 +452,7 @@ class PaidRoomController implements Controller {
 
       res.status(201).send(createdPaidRoom);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -474,7 +470,7 @@ class PaidRoomController implements Controller {
 
       res.status(200).send(paidRoom);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -525,7 +521,7 @@ class PaidRoomController implements Controller {
         updatePaidRoom: updatedPaidRoom,
       });
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -544,7 +540,7 @@ class PaidRoomController implements Controller {
 
       res.status(201).send(updatedPaidRoom);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -563,7 +559,7 @@ class PaidRoomController implements Controller {
 
       res.status(200).send(deletedPaidRoom);
     } catch (err: any) {
-      return next(new HttpException(res.statusCode, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

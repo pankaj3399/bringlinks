@@ -155,13 +155,19 @@ const registerUser = async (userData: Partial<IUsers>) => {
 
     const foundUser: IUserDocument = await User.findByUsername(
       userData?.auth?.username as string
-    );
+    ).catch((err) => {
+      Logging.error(err);
+      throw err;
+    });
     if (foundUser) {
       throw new Error("The given username is already in use");
     }
 
     const foundEmail = await User.findOne({
       "auth.email": userData?.auth?.email as string,
+    }).catch((err) => {
+      Logging.error(err);
+      throw err;
     });
     if (foundEmail) {
       throw new Error("The given email is already in use");
@@ -171,10 +177,15 @@ const registerUser = async (userData: Partial<IUsers>) => {
       auth: userData.auth,
       profile: userData.profile,
       state: userData.state,
+      signupCode: userData.signupCode,
       isVerified: true,
     };
 
-    const createdUser = await User.create(userToCreate);
+    const createdUser = await User.create(userToCreate).catch((err) => {
+      Logging.error(err);
+      throw err;
+    });
+
     Logging.log(`User created with signup code: ${createdUser._id}`);
 
     if (!createdUser) throw new Error("User registration failed");
@@ -195,13 +206,13 @@ const registerUser = async (userData: Partial<IUsers>) => {
         },
       }
     )
-      .select("-auth.password -role -refreshToken")
+      .select("-auth.password -role -refreshToken -signupCode")
       .clone()
       .exec();
 
     if (!userWithoutPassword) throw new Error("User not found");
 
-    return [userWithoutPassword, token, refreshToken];
+    return [userWithoutPassword, token];
   } catch (err: any) {
     Logging.error(`Registration error: ${err.message}`);
     throw err.message;
@@ -243,7 +254,7 @@ const loginUser = async (user: IUserDocument) => {
       },
       { new: true }
     )
-      .select("-auth.password -role -refreshToken")
+      .select("-auth.password -role -refreshToken -signupCode")
       .exec();
     if (foundUser.profile.avi.aviUrl) {
       // check if aviUrl is valid
@@ -267,7 +278,7 @@ const loginUser = async (user: IUserDocument) => {
             },
           },
           { new: true }
-        ).select("-auth.password -role -refreshToken");
+        ).select("-auth.password -role -refreshToken -signupCode");
 
         if (!updatedUser) throw new Error("User not updated");
         Logging.log(updatedUser.profile.avi.aviUrl);
@@ -294,7 +305,7 @@ export const updateUserPreferences = async (
           userPreferences,
         },
       }
-    ).select("-auth -role -refreshToken");
+    ).select("-auth -role -refreshToken -signupCode");
 
     if (!updatedUser) throw new Error("User not updated");
     return updatedUser;
@@ -333,7 +344,7 @@ const updatePassword = async (
     return foundedUser.populate({
       path: "auth",
       model: "User",
-      select: "-auth.password -role -refreshToken",
+      select: "-auth.password -role -refreshToken -signupCode",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -352,7 +363,7 @@ export const updateUser = async (
 
     const updatedUser = await User.findByIdAndUpdate({ _id: user_id }, user, {
       new: true,
-    }).select("-auth.password -role -refreshToken");
+    }).select("-auth.password -role -refreshToken -signupCode");
 
     if (!updatedUser) throw new Error("User is not updated");
 
@@ -459,7 +470,7 @@ const followerAUser = async (followee_id: string, user_id: string) => {
     return await foundUser.populate({
       path: "following",
       model: "User",
-      select: "username",
+      select: "auth.username",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -470,7 +481,7 @@ const getSchedule = async (user_Id: string) => {
   try {
     const userId = user_Id as string;
     const foundUser = await User.findById(userId)
-      .select("-auth.password -role -refreshToken")
+      .select("-auth.password -role -refreshToken -signupCode")
       .exec();
     if (!foundUser) throw new Error("User not found");
 
@@ -519,7 +530,7 @@ const findFollowers = async (user_id: string) => {
     return await foundUser.populate({
       path: "followers",
       model: "User",
-      select: "-password, role",
+      select: "-auth.password, -role, -refreshToken, -signupCode",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -534,7 +545,7 @@ const findFollowing = async (user_id: string) => {
     return await foundUser.populate({
       path: "following",
       model: "User",
-      select: "-auth.password, -role",
+      select: "-auth.password, -role, -refreshToken, -signupCode",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -552,7 +563,7 @@ export const clearRefreshToken = async (userId: string) => {
         },
       }
     )
-      .select("-auth.password, -role")
+      .select("-auth.password, -role -refreshToken -signupCode")
       .exec()
       .catch((err: any) => {
         Logging.error(err);
