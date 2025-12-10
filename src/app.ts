@@ -52,6 +52,20 @@ class App {
     this.initializeErrorHandling();
   }
   private initializeMiddleware(): void {
+
+    this.express.use(
+      "/stripe/webhook",
+      bodyParser.raw({ 
+        type: "application/json",
+        verify: (req: any, res, buf, encoding) => {
+          req.rawBody = buf;
+        }
+      }),
+      stripeWebhook
+    );
+    
+    // Now apply all other middleware normally
+    this.express.use(compression());
     this.express.use(
       fileUpload({
         limits: { fileSize: 50 * 1024 * 1024 },
@@ -66,7 +80,6 @@ class App {
     this.express.use(cors());
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
-    this.express.use(compression());
     this.express.use(
       session({
         secret: env.COOKIE,
@@ -339,8 +352,6 @@ class App {
     Logging.log(`Socket is ready`);
   }
   private initializeControllers(controllers: Controller[]): void {
-    this.express.use("/", stripeWebhook);
-
     controllers.forEach((controller: Controller) => {
       this.express.use(controller.router);
     });
@@ -348,11 +359,11 @@ class App {
   private initializeDatabaseConnection(): void {
     const { Mongo_User, Mongo_Pass, Mongo_Path } = validateEnv;
     mongoose.set("strictQuery", false);
-    mongoose.connect(`mongodb+srv://${Mongo_User}${Mongo_Pass}${Mongo_Path}`);
+    mongoose.connect(`mongodb+srv://${Mongo_User}:${Mongo_Pass}@${Mongo_Path}/bringlinks`);
 
     mongoose.connection.on("connected", () => {
       Logging.info(
-        `Successful connection to Database: ${Mongo_Path.split("&")[2]}`
+        `Successful connection to Database: ${Mongo_Path}`
       );
     });
     mongoose.connection.on("error", (err) => {

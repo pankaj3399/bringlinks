@@ -8,7 +8,7 @@ if (!stripeApiKey) {
 }
 
 const stripe = new Stripe(stripeApiKey, {
-  apiVersion: "2025-09-30.clover",
+  apiVersion: "2025-09-30.clover" as any,
 });
 
 export class StripeService {
@@ -107,7 +107,7 @@ export class StripeService {
     amount: number,
     currency: string = "usd",
     connectedAccountId: string,
-    metadata: Record<string, string> = {}
+    metadata: Record<string, string> = {},
   ) {
     try {
       const platformFeeRate = this.getPlatformFeeRate(amount);
@@ -135,7 +135,7 @@ export class StripeService {
   static async createTransfer(
     amount: number,
     connectedAccountId: string,
-    metadata: Record<string, string> = {}
+    metadata: Record<string, string> = {},
   ) {
     try {
       const transfer = await stripe.transfers.create({
@@ -216,10 +216,14 @@ export class StripeService {
             currency,
             unit_amount: unitAmount,
             product_data: { name: productName },
+            tax_behavior: "exclusive",
           },
           quantity,
         },
       ],
+      automatic_tax: {
+        enabled: true,
+      },
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
@@ -246,6 +250,83 @@ export class StripeService {
       stripeAccount: connectedAccountId,
     });
     return payout;
+  }
+
+  static async calculateTaxEstimate(params: {
+    amount: number;
+    quantity: number;
+    currency?: string;
+    country?: string;
+    postalCode?: string;
+    state?: string;
+  }) {
+    try {
+      const {
+        amount,
+        quantity,
+        currency = "usd",
+        country,
+        postalCode,
+        state,
+      } = params;
+
+      const unitAmount = Math.round(amount * 100);
+      const totalAmount = unitAmount * quantity;
+
+      const lineItems: Stripe.Tax.CalculationCreateParams.LineItem[] = [
+        {
+          amount: totalAmount,
+          reference: "ticket_purchase",
+        },
+      ];
+
+      const customerDetails: Stripe.Tax.CalculationCreateParams.CustomerDetails =
+        {};
+
+      if (country) {
+        customerDetails.address = {
+          country: country.toUpperCase(),
+        };
+        if (postalCode) {
+          customerDetails.address.postal_code = postalCode;
+        }
+        if (state) {
+          customerDetails.address.state = state;
+        }
+      }
+
+      const calculation = await stripe.tax.calculations.create({
+        currency: currency.toLowerCase(),
+        line_items: lineItems,
+        ...(Object.keys(customerDetails).length > 0 && {
+          customer_details: customerDetails,
+        }),
+      });
+
+      const subtotal =
+        calculation.amount_total - (calculation.tax_amount_exclusive || 0);
+      const taxAmount = calculation.tax_amount_exclusive || 0;
+      const totalWithTax = calculation.amount_total;
+
+      const taxBreakdown =
+        (calculation.tax_breakdown as any)?.map((tax: any) => ({
+          amount: tax.amount / 100,
+          rate: tax.rate ? tax.rate / 100 : 0,
+          jurisdiction: tax.jurisdiction?.country || "Unknown",
+          taxabilityReason: tax.taxability_reason || "not_taxable",
+        })) || [];
+
+      return {
+        subtotal: subtotal / 100,
+        taxAmount: taxAmount / 100,
+        totalWithTax: totalWithTax / 100,
+        taxBreakdown,
+        currency: currency.toLowerCase(),
+      };
+    } catch (error: any) {
+      Logging.error(`Tax calculation error: ${error.message}`);
+      throw new Error(`Failed to calculate tax estimate: ${error.message}`);
+    }
   }
 }
 
