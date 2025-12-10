@@ -42,6 +42,29 @@ const UserReceiptSchema = new Schema<IUserReceipt>(
       type: Number,
       required: true,
     },
+    subtotal: {
+      type: Number,
+      required: false,
+    },
+    taxAmount: {
+      type: Number,
+      required: false,
+    },
+    totalWithTax: {
+      type: Number,
+      required: false,
+    },
+    taxBreakdown: {
+      type: [
+        {
+          rate: { type: Number, required: true },
+          amount: { type: Number, required: true },
+          jurisdiction: { type: String, required: true },
+          taxabilityReason: { type: String, required: false },
+        },
+      ],
+      required: false,
+    },
     entryQRCode: {
       type: String,
       required: true,
@@ -58,7 +81,7 @@ const UserReceiptSchema = new Schema<IUserReceipt>(
       required: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Indexes for common queries
@@ -70,4 +93,3 @@ UserReceiptSchema.index({ userId: 1, roomId: 1 });
 
 const UserReceipt = model<IUserReceipt>("UserReceipt", UserReceiptSchema);
 export default UserReceipt;
-

@@ -13,6 +13,7 @@ import { validateEnv } from "./config/validateEnv";
 import * as dotenv from "dotenv";
 import PaidRoomController from "./src/resources/room/paidRooms/paidRoom.controller";
 import ItineraryController from "./src/resources/room/itinerary/itinerary.controller";
+import ReceiptController from "./src/resources/receipt/receipt.controller";
 dotenv.config();
 
 const app = new App(
@@ -28,8 +29,9 @@ const app = new App(
     new WalletController(),
     new ReportController(),
     new SignupCodeController(),
+    new ReceiptController(),
   ],
-  validateEnv.PORT
+  validateEnv.PORT,
 );
 
 app.listen();

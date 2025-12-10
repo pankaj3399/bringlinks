@@ -7,6 +7,13 @@ export enum PaymentStatus {
   FAILED = "failed",
 }
 
+export interface TaxBreakdownItem {
+  rate: number;
+  amount: number;
+  jurisdiction: string;
+  taxabilityReason?: string;
+}
+
 export interface IUserReceipt extends Document {
   userId: mongoose.Types.ObjectId;
   roomId: mongoose.Types.ObjectId;
@@ -17,10 +24,13 @@ export interface IUserReceipt extends Document {
   quantity: number;
   unitPrice: number;
   totalAmount: number;
+  subtotal?: number;
+  taxAmount?: number;
+  totalWithTax?: number;
+  taxBreakdown?: TaxBreakdownItem[];
   entryQRCode: string;
   ticketId: string;
   status: PaymentStatus;
   createdAt: Date;
   updatedAt: Date;
 }
-
