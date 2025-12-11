@@ -17,7 +17,7 @@ if (!stripeApiKey) {
 }
 
 const stripe = new Stripe(stripeApiKey, {
-  apiVersion: "2024-10-28.acacia" as any,
+  apiVersion: "2025-10-29.clover" as any,
 });
 
 const router = Router();

@@ -11,7 +11,7 @@ class StripeService {
       throw new Error("Missing STRIPE_SECRET_KEY in env");
     }
     this.stripe = new Stripe(this.stripeApiKey, {
-      apiVersion: "2024-10-28.acacia" as any,
+      apiVersion: "2025-10-29.clover" as any,
     });
   }
 
