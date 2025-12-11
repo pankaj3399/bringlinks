@@ -200,6 +200,7 @@ class PaidRoomController implements Controller {
         quantity,
         productName: "Room Ticket",
         metadata,
+        taxCode: "txcd_10000000",
       } as any);
 
       return res.status(200).json({

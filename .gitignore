@@ -9,3 +9,4 @@ terraform/.terraform
 *.tfstate
 *.tfstate.*
 terraform/*
+.marscode/

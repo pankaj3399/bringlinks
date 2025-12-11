@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application, RequestHandler } from "express";
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Server, Socket } from "socket.io";
 import mongoose from "mongoose";

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import Stripe from "stripe";
+import crypto from "crypto";
 import { validateEnv } from "../../../../config/validateEnv";
 import Creator from "./creator.model";
 import Logging from "../../../library/logging";
@@ -153,15 +154,20 @@ export default router;
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   try {
-    // Retrieve full session details to get tax information
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-      expand: ["total_details.breakdown"],
+      expand: ["total_details.breakdown.taxes"],
+    });
+
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      limit: 1,
+      expand: ["data.price.product"],
     });
 
     const metadata = (fullSession.metadata || {}) as Record<string, string>;
     const roomId = metadata.roomId;
     const userId = metadata.userId;
     const tierTitle = metadata.tierTitle;
+    const tierType = metadata.tierType;
     const quantity = parseInt(metadata.quantity || "1", 10) || 1;
 
     if (!roomId || !userId) {
@@ -256,5 +262,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   } catch (error: any) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
+    throw error;
   }
 }
