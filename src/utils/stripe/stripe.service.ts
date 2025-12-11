@@ -11,7 +11,7 @@ class StripeService {
       throw new Error("Missing STRIPE_SECRET_KEY in env");
     }
     this.stripe = new Stripe(this.stripeApiKey, {
-      apiVersion: "2025-10-29.clover",
+      apiVersion: "2025-10-29.clover" as any,
     });
   }
 
@@ -205,6 +205,7 @@ class StripeService {
     quantity?: number;
     metadata?: Record<string, string>;
     productName?: string;
+    taxCode?: string;
   }) {
     const {
       amount,
@@ -215,6 +216,7 @@ class StripeService {
       quantity = 1,
       metadata = {},
       productName = "Room Ticket",
+      taxCode ="txcd_10000000",
     } = params;
 
     const unitAmount = Math.round(amount * 100);
@@ -228,7 +230,7 @@ class StripeService {
           price_data: {
             currency,
             unit_amount: unitAmount,
-            product_data: { name: productName },
+            product_data: { name: productName, tax_code: taxCode, },
             tax_behavior: "exclusive",
           },
           quantity,
@@ -329,12 +331,15 @@ class StripeService {
       const totalWithTax = calculation.amount_total;
 
       const taxBreakdown =
-        calculation.tax_breakdown?.map((tax) => ({
-          amount: tax.amount / 100,
-          rate: tax.rate ? tax.rate / 100 : 0,
-          jurisdiction: tax.jurisdiction?.country || "Unknown",
-          taxabilityReason: tax.taxability_reason || "not_taxable",
-        })) || [];
+        calculation.tax_breakdown?.map((tax) => {
+          const taxWithDetails = tax as any;
+          return {
+            amount: tax.amount / 100,
+            rate: taxWithDetails.rate ? taxWithDetails.rate / 100 : 0,
+            jurisdiction: taxWithDetails.jurisdiction?.country || "Unknown",
+            taxabilityReason: tax.taxability_reason || "not_taxable",
+          };
+        }) || [];
 
       return {
         subtotal: subtotal / 100,

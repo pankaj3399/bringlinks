@@ -31,7 +31,9 @@ function ValidationMiddleware(
     | Partial<IReport>
     | ICreatorSignupRequest
     | ICreatorRegistrationRequest
-  >
+    | any
+  >,
+  location: "body" | "query" | "params" = "body"
 ): RequestHandler {
   return async (
     req: Request,
@@ -44,8 +46,24 @@ function ValidationMiddleware(
       stripUnknown: true,
     };
     try {
-      const value = await schema.validateAsync(req.body, validationOptions);
-      req.body = value;
+      let dataToValidate: any;
+      if (location === "query") {
+        dataToValidate = req.query;
+      } else if (location === "params") {
+        dataToValidate = req.params;
+      } else {
+        dataToValidate = req.body;
+      }
+
+      const value = await schema.validateAsync(dataToValidate, validationOptions);
+      
+      if (location === "query") {
+        req.query = value;
+      } else if (location === "params") {
+        req.params = value;
+      } else {
+        req.body = value;
+      }
       next();
     } catch (err: any) {
       const errors: string[] = [];

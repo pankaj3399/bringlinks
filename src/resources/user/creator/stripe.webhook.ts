@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import Stripe from "stripe";
+import crypto from "crypto";
 import { validateEnv } from "../../../../config/validateEnv";
 import Creator from "./creator.model";
 import Logging from "../../../library/logging";
@@ -21,9 +22,10 @@ const stripe = new Stripe(stripeApiKey, {
 
 const router = Router();
 
-router.post("/stripe/webhook", async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"] as string;
   const endpointSecret = validateEnv.STRIPE_WEBHOOK_SECRET;
+  Logging.log(`endpointSecret: ${endpointSecret}`);
 
   let event: Stripe.Event;
 
@@ -134,19 +136,36 @@ export default router;
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   try {
-    // Retrieve full session details to get tax information
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-      expand: ["total_details.breakdown"],
+      expand: ["total_details.breakdown.taxes"],
+    });
+
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      limit: 1,
+      expand: ["data.price.product"],
     });
 
     const metadata = (fullSession.metadata || {}) as Record<string, string>;
     const roomId = metadata.roomId;
     const userId = metadata.userId;
     const tierTitle = metadata.tierTitle;
+    const tierType = metadata.tierType;
     const quantity = parseInt(metadata.quantity || "1", 10) || 1;
 
-    if (!roomId || !userId) {
-      Logging.error(`Missing metadata - roomId: ${roomId}, userId: ${userId}`);
+    if (!roomId || !userId || !tierTitle) {
+      Logging.error(
+        `Missing metadata - roomId: ${roomId}, userId: ${userId}, tierTitle: ${tierTitle}`,
+      );
+      return;
+    }
+
+    const existingReceipt = await UserReceipt.findOne({
+      stripeSessionId: fullSession.id,
+    });
+    if (existingReceipt) {
+      Logging.log(
+        `Receipt already exists for session ${fullSession.id}, skipping fulfillment.`,
+      );
       return;
     }
 
@@ -156,12 +175,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const pricing = paidRoom.tickets?.pricing || ([] as any[]);
-    const idx = pricing.findIndex(
+    const pricing = paidRoom.tickets?.pricing || [];
+    const pricingIndex = pricing.findIndex(
       (p: any) => p.title === tierTitle || p.tiers === tierTitle,
     );
 
-    if (idx === -1) {
+    if (pricingIndex === -1) {
       Logging.error(
         `Tier "${tierTitle}" not found! Available tiers: ${pricing
           .map((p: any) => p.title)
@@ -170,125 +189,139 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const target = pricing[idx];
-
-    if (target.available < quantity) {
+    const tier = pricing[pricingIndex] as any;
+    if (tier.available < quantity) {
       Logging.error(
-        `Insufficient tickets! Requested: ${quantity}, Available: ${target.available}`,
+        `Insufficient tickets! Requested: ${quantity}, Available: ${tier.available}`,
       );
       return;
     }
 
-    target.sold = (target.sold || 0) + quantity;
-    target.available = Math.max(0, target.available - quantity);
+    const paymentIntentId =
+      typeof fullSession.payment_intent === "string"
+        ? fullSession.payment_intent
+        : fullSession.payment_intent?.id;
 
-    const revenue = target.price * quantity;
-    paidRoom.tickets.totalRevenue =
-      (paidRoom.tickets.totalRevenue || 0) + revenue;
+    const amountSubtotal = fullSession.amount_subtotal ?? 0;
+    const amountTax = fullSession.total_details?.amount_tax ?? 0;
+    const amountTotal = fullSession.amount_total ?? amountSubtotal + amountTax;
 
-    if (!paidRoom.tickets.receiptId) {
-      paidRoom.tickets.receiptId = [];
-    }
-    const pi =
-      typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id;
-    if (pi) {
-      (paidRoom.tickets.receiptId as any).push(pi);
+    const taxBreakdown =
+      fullSession.total_details?.breakdown?.taxes?.map((tax) => {
+        const ratePercentage =
+          typeof tax.rate === "object" && tax.rate !== null
+            ? ((tax.rate as any).percentage as number | undefined) ?? 0
+            : 0;
+
+        return {
+          rate: ratePercentage / 100,
+          amount: (tax.amount ?? 0) / 100,
+          jurisdiction: (tax as any).jurisdiction || "Unknown",
+          taxabilityReason: (tax as any).taxability_reason || undefined,
+        };
+      }) || [];
+
+    const lineItem = lineItems.data[0];
+    const unitPrice =
+      (lineItem?.price?.unit_amount ?? tier.price * 100) / 100;
+
+    const subtotal = amountSubtotal / 100;
+    const taxAmount = amountTax / 100;
+    const totalWithTax = amountTotal / 100;
+    const totalAmount = subtotal;
+
+    const ticketId = `ticket_${session.id}_${Date.now()}_${crypto
+      .randomBytes(6)
+      .toString("hex")}`;
+    const entryCode = crypto.randomUUID();
+
+    let entryQRCode: string = entryCode;
+    try {
+      entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
+    } catch (qrError: any) {
+      Logging.error(`Entry QR code generation error: ${qrError.message}`);
     }
 
-    if (!paidRoom.tickets.paidUsers) {
-      paidRoom.tickets.paidUsers = [];
-    }
+    tier.sold = (tier.sold || 0) + quantity;
+    tier.available = Math.max(0, (tier.available || 0) - quantity);
+
+    paidRoom.tickets.totalSold = pricing.reduce(
+      (acc: number, current: any) => acc + (current.sold || 0),
+      0,
+    );
+    paidRoom.tickets.totalTicketsAvailable = pricing.reduce(
+      (acc: number, current: any) => acc + (current.available || 0),
+      0,
+    );
+    paidRoom.tickets.totalRevenue = pricing.reduce(
+      (acc: number, current: any) => acc + (current.sold || 0) * (current.price || 0),
+      0,
+    );
+
+    paidRoom.tickets.paidUsers = paidRoom.tickets.paidUsers || [];
     if (!paidRoom.tickets.paidUsers.some((id) => id.toString() === userId)) {
-      (paidRoom.tickets.paidUsers as any).push(userId);
+      paidRoom.tickets.paidUsers.push(userId as any);
     }
+
+    paidRoom.tickets.receiptId = paidRoom.tickets.receiptId || [];
 
     paidRoom.markModified("tickets");
 
-    await paidRoom.save();
+    const userReceipt = await UserReceipt.create({
+      userId,
+      roomId,
+      stripePaymentIntentId: paymentIntentId || "",
+      stripeSessionId: fullSession.id,
+      tierTitle: tier.title,
+      tierType: tierType || tier.tiers,
+      quantity,
+      unitPrice,
+      totalAmount,
+      subtotal,
+      taxAmount,
+      totalWithTax,
+      taxBreakdown: taxBreakdown.length ? taxBreakdown : undefined,
+      entryQRCode,
+      ticketId,
+      status: PaymentStatus.COMPLETED,
+    });
 
-    // Add user to the Room's entered_id array
+    if (
+      !paidRoom.tickets.receiptId.some(
+        (rid: string) => rid.toString() === userReceipt._id.toString(),
+      )
+    ) {
+      paidRoom.tickets.receiptId.push(userReceipt._id.toString());
+    }
+
+    const updatedPaidRoom = await paidRoom.save();
+
     try {
       await Rooms.updateOne(
         { _id: roomId },
         { $addToSet: { entered_id: userId } },
       );
-      Logging.log(`User ${userId} added to entered_id for room ${roomId}`);
     } catch (roomError: any) {
       Logging.error(`Failed to add user to entered_id: ${roomError.message}`);
     }
 
-    // Generate QR code and create UserReceipt
-    const ticketId = `ticket_${session.id}_${Date.now()}`;
-    let entryQRCode = "";
+    console.log("Stripe checkout totals", {
+      subtotal,
+      taxAmount,
+      totalWithTax,
+    });
+    console.log("Updated pricing", pricing);
+    console.log("Updated paidRoom summary", {
+      totalSold: updatedPaidRoom.tickets.totalSold,
+      totalTicketsAvailable: updatedPaidRoom.tickets.totalTicketsAvailable,
+      totalRevenue: updatedPaidRoom.tickets.totalRevenue,
+      paidUsers: updatedPaidRoom.tickets.paidUsers,
+      receiptId: updatedPaidRoom.tickets.receiptId,
+    });
 
-    try {
-      entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
-      Logging.log(
-        `Entry QR code generated for user ${userId} for room ${roomId}`,
-      );
-    } catch (qrError: any) {
-      Logging.error(`Entry QR code generation error: ${qrError.message}`);
-    }
-
-    // Extract tax information from session
-    const subtotal = fullSession.amount_subtotal
-      ? fullSession.amount_subtotal / 100
-      : revenue;
-    const taxAmount = fullSession.total_details?.amount_tax
-      ? fullSession.total_details.amount_tax / 100
-      : 0;
-    const totalWithTax = fullSession.amount_total
-      ? fullSession.amount_total / 100
-      : revenue + taxAmount;
-
-    // Parse tax breakdown if available
-    let taxBreakdown: Array<{
-      rate: number;
-      amount: number;
-      jurisdiction: string;
-      taxabilityReason?: string;
-    }> = [];
-
-    const breakdown = fullSession.total_details?.breakdown;
-    if (breakdown && "tax" in breakdown && Array.isArray(breakdown.tax)) {
-      taxBreakdown = breakdown.tax.map((tax: any) => ({
-        rate: tax.rate ? tax.rate / 100 : 0,
-        amount: tax.amount / 100,
-        jurisdiction: tax.jurisdiction?.country || "Unknown",
-        taxabilityReason: tax.taxability_reason || undefined,
-      }));
-    }
-
-    // Create UserReceipt document
-    try {
-      const userReceipt = await UserReceipt.create({
-        userId,
-        roomId,
-        stripePaymentIntentId: pi || "",
-        stripeSessionId: fullSession.id,
-        tierTitle: target.title,
-        tierType: target.tiers,
-        quantity,
-        unitPrice: target.price,
-        totalAmount: revenue,
-        subtotal,
-        taxAmount,
-        totalWithTax,
-        taxBreakdown: taxBreakdown.length > 0 ? taxBreakdown : undefined,
-        entryQRCode,
-        ticketId,
-        status: PaymentStatus.COMPLETED,
-      });
-
-      Logging.log(
-        `UserReceipt created for user ${userId}, room ${roomId}, receipt: ${userReceipt._id}`,
-      );
-    } catch (receiptError: any) {
-      Logging.error(`Failed to create UserReceipt: ${receiptError.message}`);
-    }
+    return { paidRoom: updatedPaidRoom, receipt: userReceipt };
   } catch (error: any) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
+    throw error;
   }
 }
