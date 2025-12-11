@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import Stripe from "stripe";
+import crypto from "crypto";
 import { validateEnv } from "../../../../config/validateEnv";
 import Creator from "./creator.model";
 import Logging from "../../../library/logging";
@@ -137,17 +138,28 @@ export default router;
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   try {
-    // Retrieve full session details to get tax information
     const fullSession = await stripe.checkout.sessions.retrieve(session.id, {
-      expand: ["total_details.breakdown"],
+      expand: ["total_details.breakdown.taxes"],
+    });
+
+    const lineItems = await stripe.checkout.sessions.listLineItems(session.id, {
+      limit: 1,
+      expand: ["data.price.product"],
     });
 
     const metadata = (fullSession.metadata || {}) as Record<string, string>;
     const roomId = metadata.roomId;
     const userId = metadata.userId;
     const tierTitle = metadata.tierTitle;
+    const tierType = metadata.tierType;
     const quantity = parseInt(metadata.quantity || "1", 10) || 1;
-    if (!roomId || !userId) return;
+
+    if (!roomId || !userId || !tierTitle) {
+      Logging.error(
+        `Missing metadata - roomId: ${roomId}, userId: ${userId}, tierTitle: ${tierTitle}`,
+      );
+      return;
+    }
 
     const paidRoom = await PaidRoom.findOne({ "tickets.roomId": roomId });
     if (!paidRoom) {
@@ -155,12 +167,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const pricing = paidRoom.tickets?.pricing || ([] as any[]);
-    const idx = pricing.findIndex(
+    const pricing = paidRoom.tickets?.pricing || [];
+    const pricingIndex = pricing.findIndex(
       (p: any) => p.title === tierTitle || p.tiers === tierTitle,
     );
 
-    if (idx === -1) {
+    if (pricingIndex === -1) {
       Logging.error(
         `Tier "${tierTitle}" not found! Available tiers: ${pricing
           .map((p: any) => p.title)
@@ -169,17 +181,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const target = pricing[idx];
-
-    if (target.available < quantity) {
+    const tier = pricing[pricingIndex] as any;
+    if (tier.available < quantity) {
       Logging.error(
-        `Insufficient tickets! Requested: ${quantity}, Available: ${target.available}`,
+        `Insufficient tickets! Requested: ${quantity}, Available: ${tier.available}`,
       );
       return;
     }
 
     // Calculate revenue for this purchase
-    const revenue = target.price * quantity;
+    const revenue = tier.price * quantity;
 
     // Get payment intent ID
     const pi =
@@ -188,14 +199,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         : session.payment_intent?.id;
 
     // Use the tier identifier (tiers enum value) for array filter
-    const tierIdentifier = target.tiers || target.title;
+    const tierIdentifier = tier.tiers || tier.title;
 
     // Recalculate revenue from updated pricing (after increment)
     const updatedPricing = [...pricing];
-    updatedPricing[idx] = {
-      ...target,
-      sold: (target.sold || 0) + quantity,
-      available: Math.max(0, (target.available || 0) - quantity),
+    updatedPricing[pricingIndex] = {
+      ...tier,
+      sold: (tier.sold || 0) + quantity,
+      available: Math.max(0, (tier.available || 0) - quantity),
     };
 
     const newTotalSold = updatedPricing.reduce((acc: number, curr: any) => {
@@ -263,7 +274,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         { _id: roomId },
         { $addToSet: { entered_id: userId } },
       );
-      Logging.log(`User ${userId} added to entered_id for room ${roomId}`);
     } catch (roomError: any) {
       Logging.error(`Failed to add user to entered_id: ${roomError.message}`);
     }
@@ -340,6 +350,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     // }
   } catch (error: any) {
     Logging.error(`Checkout fulfillment error: ${error.message}`);
+    throw error;
   }
 }
 

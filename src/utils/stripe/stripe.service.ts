@@ -192,6 +192,7 @@ export class StripeService {
     quantity?: number;
     metadata?: Record<string, string>;
     productName?: string;
+    taxCode?: string;
   }) {
     const {
       amount,
@@ -202,6 +203,7 @@ export class StripeService {
       quantity = 1,
       metadata = {},
       productName = "Room Ticket",
+      taxCode ="txcd_10000000",
     } = params;
 
     const unitAmount = Math.round(amount * 100);
@@ -215,7 +217,7 @@ export class StripeService {
           price_data: {
             currency,
             unit_amount: unitAmount,
-            product_data: { name: productName },
+            product_data: { name: productName, tax_code: taxCode, },
             tax_behavior: "exclusive",
           },
           quantity,
