@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application, RequestHandler } from "express";
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Server, Socket } from "socket.io";
 import mongoose from "mongoose";
@@ -52,21 +52,37 @@ class App {
     this.initializeErrorHandling();
   }
   private initializeMiddleware(): void {
+    const webhookPath = "/stripe/webhook";
+    const skipWebhook = (middleware: RequestHandler): RequestHandler => {
+      return (req, res, next) => {
+        if (req.originalUrl === webhookPath) {
+          return next();
+        }
+        return middleware(req, res, next);
+      };
+    };
+    const jsonParser = express.json();
+    const urlencodedParser = express.urlencoded({ extended: true });
+    const bodyParserJson = bodyParser.json();
+
+    // Stripe webhook needs raw body for signature verification before any body parsers
     this.express.use(
-      fileUpload({
-        limits: { fileSize: 300 * 1024 * 1024 },
-        useTempFiles: false,
-        abortOnLimit: true,
-      }),
-    );
-    // Stripe webhook needs raw body for signature verification
-    this.express.use(
-      "/stripe/webhook",
+      webhookPath,
       express.raw({ type: "application/json" }),
     );
-    this.express.use(express.json());
-    this.express.use(express.urlencoded({ extended: true }));
-    this.express.use(bodyParser.json());
+
+    this.express.use(
+      skipWebhook(
+        fileUpload({
+          limits: { fileSize: 300 * 1024 * 1024 },
+          useTempFiles: false,
+          abortOnLimit: true,
+        }),
+      ),
+    );
+    this.express.use(skipWebhook(jsonParser));
+    this.express.use(skipWebhook(urlencodedParser));
+    this.express.use(skipWebhook(bodyParserJson));
     this.express.use(
       cors({
         origin: (origin, callback) => {
@@ -387,7 +403,7 @@ class App {
     Logging.log(`Socket is ready`);
   }
   private initializeControllers(controllers: Controller[]): void {
-    this.express.use("/", stripeWebhook);
+    this.express.use("/stripe/webhook", stripeWebhook);
 
     controllers.forEach((controller: Controller) => {
       this.express.use(controller.router);
@@ -396,11 +412,13 @@ class App {
   private initializeDatabaseConnection(): void {
     const { Mongo_User, Mongo_Pass, Mongo_Path } = validateEnv;
     mongoose.set("strictQuery", false);
-    mongoose.connect(`mongodb+srv://${Mongo_User}${Mongo_Pass}${Mongo_Path}`);
+    mongoose.connect(
+      `mongodb+srv://${Mongo_User}:${Mongo_Pass}@${Mongo_Path}/bringlinks?retryWrites=true&w=majority`
+    );
 
     mongoose.connection.on("connected", () => {
       Logging.info(
-        `Successful connection to Database: ${Mongo_Path.split("&")[2]}`,
+        `Successful connection to Database: ${Mongo_Path}`,
       );
     });
     mongoose.connection.on("error", (err) => {
