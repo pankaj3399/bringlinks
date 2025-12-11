@@ -172,9 +172,9 @@ export const registerCreator = async (creatorData: ICreatorRegistrationRequest) 
 export const canCreatePaidRooms = async (userId: string) => {
   try {
     //uncomment follwing if you want to allow creator to create paid room without creating stripe connect account
-    if ((validateEnv.FORCE_CREATOR_ELIGIBLE || "").toString().toLowerCase() === "true") {
-      return { canCreate: true };
-    }
+    // if ((validateEnv.FORCE_CREATOR_ELIGIBLE || "").toString().toLowerCase() === "true") {
+    //   return { canCreate: true };
+    // }
 
     const creator = await Creator.findOne({ userId });
     
