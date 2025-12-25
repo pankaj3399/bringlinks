@@ -1,48 +1,43 @@
 import Creator from "./creator.model";
 import User from "../user.model";
 import { validateAndUseSignupCode } from "../../signupCode/signupCode.service";
-import {
-  ICreatorRegistrationRequest,
-  ICreatorSignupRequest,
-  StripeAccountStatus,
-} from "./creator.interface";
+import { ICreatorRegistrationRequest, ICreatorSignupRequest, StripeAccountStatus } from "./creator.interface";
 import { validateEnv } from "../../../../config/validateEnv";
 import Logging from "../../../library/logging";
+import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import jwt from "../../../utils/authentication/jwt.createtoken";
 import StripeService from "../../../utils/stripe/stripe.service";
-import { parseAllowedStates } from "../../../utils/parseStates/allowedStates";
 
 export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
   try {
-    const { email, password, firstName, lastName, state, signupCode } =
-      creatorData;
+    const { email, password, firstName, lastName, state, signupCode, ...applicationData } = creatorData;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       throw new Error("User with this email already exists");
     }
 
-    // Signup code is required for all creator signups
-    if (!signupCode) {
-      throw new Error("Signup code is required for creator signup");
-    }
+    const parseAllowedStates = (): string[] => {
+      const raw = validateEnv.ALLOWED_STATES || "";
+      return raw
+        .split(",")
+        .map((s: string) => s.trim().toLowerCase())
+        .filter((s: string) => !!s);
+    };
 
     const allowedStates = parseAllowedStates();
-    const isFromAllowedState = allowedStates.includes(
-      state.trim().toLowerCase()
-    );
-
+    const isFromAllowedState = allowedStates.includes(state.trim().toLowerCase());
+    
     if (!isFromAllowedState) {
       throw new Error("Creator registration not available in your state");
     }
 
-    // Validate and use signup code
-    const codeConsumed = await validateAndUseSignupCode(signupCode);
-    if (!codeConsumed) {
-      throw new Error(
-        "Invalid signup code or code has reached maximum usage limit"
-      );
+    if (signupCode) {
+      const codeConsumed = await validateAndUseSignupCode(signupCode);
+      if (!codeConsumed) {
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
+      }
     }
 
     const saltRounds = 10;
@@ -50,19 +45,19 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
 
     const user = await User.create({
       auth: {
-        username: email,
+        username: email,  
         email: email,
         password: hashedPassword,
       },
       profile: {
         firstName: firstName,
         lastName: lastName,
-        birthDate: new Date(),
-        occupation: "Creator",
+        birthDate: new Date(), 
+        occupation: "Creator", 
       },
       state: state,
-      role: "USER",
-      isVerified: false,
+      role: "USER", 
+      isVerified: false, 
     });
 
     if (!user) {
@@ -72,6 +67,7 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
     const creator = await Creator.create({
       userId: user._id,
       signupCode,
+      ...applicationData,
     });
 
     if (!creator) {
@@ -81,15 +77,13 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
 
     await User.findByIdAndUpdate(user._id, {
       role: "CREATOR",
-      creator: creator._id,
+      creator: creator._id
     });
 
-    const [accessToken, refreshToken] = jwt.CreateToken({
-      userId: user._id.toString(),
-    });
+    const [accessToken, refreshToken] = jwt.CreateToken({ userId: user._id.toString() });
 
     Logging.log(`Creator signed up successfully: ${creator._id}`);
-
+    
     return {
       user: {
         _id: user._id,
@@ -102,10 +96,13 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
       creator: {
         _id: creator._id,
         signupCode: creator.signupCode,
+        portfolio: creator.portfolio,
+        socialMedia: creator.socialMedia,
+        experience: creator.experience,
         stripeAccountStatus: creator.stripeAccountStatus,
       },
       token: accessToken,
-      refreshToken,
+      refreshToken
     };
   } catch (err: any) {
     Logging.error(`Creator signup error: ${err.message}`);
@@ -113,37 +110,35 @@ export const signupAsCreator = async (creatorData: ICreatorSignupRequest) => {
   }
 };
 
-export const registerCreator = async (
-  creatorData: ICreatorRegistrationRequest
-) => {
+export const registerCreator = async (creatorData: ICreatorRegistrationRequest) => {
   try {
-    const { userId } = creatorData;
+    const { userId, signupCode, ...applicationData } = creatorData;
 
     const user = await User.findById(userId);
     if (!user) {
       throw new Error("User not found");
     }
-    const signupCode = user.signupCode;
 
-    // Signup code is required for all creator registrations
-    if (!signupCode) {
-      throw new Error("Signup code is required for creator registration");
-    }
+    const parseAllowedStates = (): string[] => {
+      const raw = validateEnv.ALLOWED_STATES || "";
+      return raw
+        .split(",")
+        .map((s: string) => s.trim().toLowerCase())
+        .filter((s: string) => !!s);
+    };
 
     const allowedStates = parseAllowedStates();
-    const isFromAllowedState =
-      user.state && allowedStates.includes(user.state.trim().toLowerCase());
-
+    const isFromAllowedState = user.state && allowedStates.includes(user.state.trim().toLowerCase());
+    
     if (!isFromAllowedState) {
       throw new Error("Creator registration not available in your state");
     }
 
-    // Validate and use signup code
-    const codeConsumed = await validateAndUseSignupCode(signupCode);
-    if (!codeConsumed) {
-      throw new Error(
-        "Invalid signup code or code has reached maximum usage limit"
-      );
+    if (signupCode) {
+      const codeConsumed = await validateAndUseSignupCode(signupCode);
+      if (!codeConsumed) {
+        throw new Error("Invalid signup code or code has reached maximum usage limit");
+      }
     }
 
     const existingCreator = await Creator.findOne({ userId });
@@ -154,15 +149,16 @@ export const registerCreator = async (
     const creator = await Creator.create({
       userId,
       signupCode,
+      ...applicationData,
     });
 
     if (!creator) {
       throw new Error("Creator registration failed");
     }
 
-    await User.findByIdAndUpdate(userId, {
+    await User.findByIdAndUpdate(userId, { 
       role: "CREATOR",
-      creator: creator._id,
+      creator: creator._id
     });
 
     Logging.log(`Creator registered successfully: ${creator._id}`);
@@ -181,12 +177,12 @@ export const canCreatePaidRooms = async (userId: string) => {
     // }
 
     const creator = await Creator.findOne({ userId });
-
+    
     if (!creator) {
       return {
         canCreate: false,
         reason: "Creator account not found",
-        action: "register_as_creator",
+        action: "register_as_creator"
       };
     }
 
@@ -195,7 +191,7 @@ export const canCreatePaidRooms = async (userId: string) => {
         canCreate: false,
         reason: "Stripe Connect account required",
         redirectTo: "/creator/stripe-connect/onboard",
-        action: "redirect_to_stripe_connect",
+        action: "redirect_to_stripe_connect"
       };
     }
 
@@ -204,26 +200,15 @@ export const canCreatePaidRooms = async (userId: string) => {
         canCreate: false,
         reason: "Stripe Connect account not active",
         redirectTo: "/creator/stripe-connect/onboard",
-        action: "redirect_to_stripe_connect",
+        action: "redirect_to_stripe_connect"
       };
     }
 
     return {
-      canCreate: true,
+      canCreate: true
     };
   } catch (err: any) {
     Logging.error(`Can create paid rooms check error: ${err.message}`);
-    throw err;
-  }
-};
-
-export const getReviewsByCreatorId = async (creatorId: string) => {
-  try {
-    const reviews = await Creator.find({ creatorId }).select("reviews");
-
-    return reviews;
-  } catch (err: any) {
-    Logging.error(`Get reviews by creator ID error: ${err.message}`);
     throw err;
   }
 };
@@ -246,25 +231,16 @@ export const getCreatorById = async (creatorId: string) => {
   }
 };
 
-export const updateCreatorProfile = async (
-  creatorId: string,
-  updateData: Partial<ICreatorRegistrationRequest>
-) => {
+export const updateCreatorProfile = async (creatorId: string, updateData: Partial<ICreatorRegistrationRequest>) => {
   try {
-    return await Creator.findByIdAndUpdate(creatorId, updateData, {
-      new: true,
-    });
+    return await Creator.findByIdAndUpdate(creatorId, updateData, { new: true });
   } catch (err: any) {
     Logging.error(`Update creator profile error: ${err.message}`);
     throw err;
   }
 };
 
-export const initiateStripeConnectOnboarding = async (
-  userId: string,
-  returnUrl: string,
-  refreshUrl: string
-) => {
+export const initiateStripeConnectOnboarding = async (userId: string, returnUrl: string, refreshUrl: string) => {
   try {
     const creator = await Creator.findOne({ userId });
     if (!creator) {
@@ -282,7 +258,7 @@ export const initiateStripeConnectOnboarding = async (
       const stripeAccount = await StripeService.createConnectAccount(
         userId,
         user.auth.email,
-        "US"
+        user.state || "US"
       );
       stripeAccountId = stripeAccount.id;
 
@@ -329,12 +305,8 @@ export const getStripeConnectStatus = async (userId: string) => {
       };
     }
 
-    const isReady = await StripeService.isAccountReady(
-      creator.stripeConnectAccountId
-    );
-    const realStatus = isReady
-      ? StripeAccountStatus.ACTIVE
-      : StripeAccountStatus.PENDING;
+    const isReady = await StripeService.isAccountReady(creator.stripeConnectAccountId);
+    const realStatus = isReady ? StripeAccountStatus.ACTIVE : StripeAccountStatus.PENDING;
 
     if (creator.stripeAccountStatus !== realStatus) {
       await Creator.findByIdAndUpdate(creator._id, {
@@ -365,12 +337,8 @@ export const completeStripeConnectOnboarding = async (userId: string) => {
       throw new Error("Stripe Connect account not initiated");
     }
 
-    const isReady = await StripeService.isAccountReady(
-      creator.stripeConnectAccountId
-    );
-    const realStatus = isReady
-      ? StripeAccountStatus.ACTIVE
-      : StripeAccountStatus.PENDING;
+    const isReady = await StripeService.isAccountReady(creator.stripeConnectAccountId);
+    const realStatus = isReady ? StripeAccountStatus.ACTIVE : StripeAccountStatus.PENDING;
 
     const updatedCreator = await Creator.findByIdAndUpdate(
       creator._id,

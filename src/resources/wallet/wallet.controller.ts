@@ -79,7 +79,10 @@ class WalletController implements Controller {
       const [token, refreshToken] = jwt.CreateToken({
         userId: userId,
         role: req.user?.role,
-        name: userWithWallet.firstName + "," + userWithWallet.lastName,
+        name:
+          userWithWallet.firstName +
+          "," +
+          userWithWallet.lastName,
         email: userWithWallet.email,
       });
 
@@ -89,7 +92,7 @@ class WalletController implements Controller {
       Logging.info(userWithWallet);
       res.status(201).send(userWithWallet);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -108,7 +111,7 @@ class WalletController implements Controller {
       Logging.info(foundWallet);
       res.status(200).send(foundWallet);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -127,7 +130,7 @@ class WalletController implements Controller {
       Logging.info(updatedWallet);
       res.status(201).send(updatedWallet);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -144,7 +147,7 @@ class WalletController implements Controller {
 
       res.status(200).send("Wallet deleted");
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 }

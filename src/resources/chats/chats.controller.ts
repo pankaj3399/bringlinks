@@ -2,43 +2,34 @@ import { Request, Response, NextFunction, Router } from "express";
 import Controller from "../../utils/interfaces/controller.interface";
 import Logging from "../../library/logging";
 import HttpException from "../../middleware/exceptions/http.exception";
-import {
-  findRoomChat,
-  findUserChats,
-  getChatHistory,
-  createGroup,
-  updateGroup,
-  getGroupById,
-  getUserGroups,
-  addMemberToGroup,
+import { 
+  findRoomChat, 
+  findUserChats, 
+  getChatHistory, 
+  createGroup, 
+  updateGroup, 
+  getGroupById, 
+  getUserGroups, 
+  addMemberToGroup, 
   removeMemberFromGroup,
   createMessageWithMedia,
   editMessage,
   deleteMessage,
-  getChatHistoryWithMedia,
+  getChatHistoryWithMedia
 } from "./chats.service";
-import {
-  ChatTypes,
-  IMessageRequest,
-  ICreateGroupRequest,
-  IUpdateGroupRequest,
-} from "./chats.interface";
+import { ChatTypes, IMessageRequest, ICreateGroupRequest, IUpdateGroupRequest } from "./chats.interface";
 import { RequiredAuth } from "../../middleware/auth.middleware";
-import {
-  createGroupValidation,
-  updateGroupValidation,
-  addMemberValidation,
-  removeMemberValidation,
-  editMessageValidation,
-  deleteMessageValidation,
+import { 
+  createGroupValidation, 
+  updateGroupValidation, 
+  addMemberValidation, 
+  removeMemberValidation, 
+  editMessageValidation, 
+  deleteMessageValidation, 
   getChatHistoryValidation,
+  uploadMediaValidation
 } from "./chats.validation";
-import {
-  uploadMediaFile,
-  getMediaTypeFromMimeType,
-  validateMediaFile,
-  MediaType,
-} from "../../utils/ImageServices/mediaUpload";
+import { uploadMediaFile, getMediaTypeFromMimeType, validateMediaFile, MediaType } from "../../utils/ImageServices/mediaUpload";
 
 class ChatController implements Controller {
   public path = "/chat";
@@ -49,67 +40,27 @@ class ChatController implements Controller {
   }
 
   private initializeRoutes(): void {
-    this.router.get(
-      `${this.path}/history/:chatType/:targetId`,
-      RequiredAuth,
-      this.getChatHistoryWithMedia
-    );
+    this.router.get(`${this.path}/history/:chatType/:targetId`, RequiredAuth, this.getChatHistoryWithMedia);
 
     this.router.post(`${this.path}/group`, RequiredAuth, this.createGroup);
     this.router.get(`${this.path}/group/:groupId`, RequiredAuth, this.getGroup);
-    this.router.get(
-      `${this.path}/groups/user/:userId`,
-      RequiredAuth,
-      this.getUserGroups
-    );
-    this.router.put(
-      `${this.path}/group/:groupId`,
-      RequiredAuth,
-      this.updateGroup
-    );
-    this.router.post(
-      `${this.path}/group/:groupId/member`,
-      RequiredAuth,
-      this.addMember
-    );
-    this.router.delete(
-      `${this.path}/group/:groupId/member/:userId`,
-      RequiredAuth,
-      this.removeMember
-    );
+    this.router.get(`${this.path}/groups/user/:userId`, RequiredAuth, this.getUserGroups);
+    this.router.put(`${this.path}/group/:groupId`, RequiredAuth, this.updateGroup);
+    this.router.post(`${this.path}/group/:groupId/member`, RequiredAuth, this.addMember);
+    this.router.delete(`${this.path}/group/:groupId/member/:userId`, RequiredAuth, this.removeMember);
 
     this.router.get(
       `${this.path}/:chatid/:userId/:chatType`,
       RequiredAuth,
       this.getChatHistory
     );
-    this.router.get(
-      `${this.path}/:userId/:chatid`,
-      RequiredAuth,
-      this.userChats
-    );
-    this.router.get(
-      `${this.path}/:roomId/:chatid`,
-      RequiredAuth,
-      this.roomChats
-    );
+    this.router.get(`${this.path}/:userId/:chatid`, RequiredAuth, this.userChats);
+    this.router.get(`${this.path}/:roomId/:chatid`, RequiredAuth, this.roomChats);
     this.router.post(`${this.path}/message`, RequiredAuth, this.sendMessage);
-    this.router.put(
-      `${this.path}/message/:messageId`,
-      RequiredAuth,
-      this.editMessage
-    );
-    this.router.delete(
-      `${this.path}/message/:messageId`,
-      RequiredAuth,
-      this.deleteMessage
-    );
-
-    this.router.post(
-      `${this.path}/upload-media`,
-      RequiredAuth,
-      this.uploadMedia
-    );
+    this.router.put(`${this.path}/message/:messageId`, RequiredAuth, this.editMessage);
+    this.router.delete(`${this.path}/message/:messageId`, RequiredAuth, this.deleteMessage);
+    
+    this.router.post(`${this.path}/upload-media`, RequiredAuth, this.uploadMedia);
   }
   private getChatHistory = async (
     req: Request,
@@ -183,7 +134,7 @@ class ChatController implements Controller {
         chatType,
         targetId,
         page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        limit: parseInt(limit as string)
       });
 
       if (validation.error) {
@@ -200,7 +151,7 @@ class ChatController implements Controller {
 
       res.status(200).json(result);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -210,8 +161,7 @@ class ChatController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const { receiver, groupId, roomId, message, chatType, replyTo } =
-        req.body;
+      const { receiver, groupId, roomId, message, chatType, replyTo } = req.body;
       if (!req.user?._id) throw new Error("Unauthorized");
       const sender = req.user._id as string;
 
@@ -222,7 +172,7 @@ class ChatController implements Controller {
         roomId,
         message,
         chatType,
-        replyTo,
+        replyTo
       };
 
       const newMessage = await createMessageWithMedia(messageData);
@@ -230,7 +180,7 @@ class ChatController implements Controller {
 
       res.status(201).json(newMessage);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -255,7 +205,7 @@ class ChatController implements Controller {
 
       res.status(200).json(updatedMessage);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -279,7 +229,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Message deleted successfully" });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -305,7 +255,7 @@ class ChatController implements Controller {
 
       res.status(200).json(mediaMessage);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -319,11 +269,7 @@ class ChatController implements Controller {
       if (!req.user?._id) throw new Error("Unauthorized");
       const createdBy = req.user._id as string;
 
-      const validation = createGroupValidation.validate({
-        name,
-        description,
-        members,
-      });
+      const validation = createGroupValidation.validate({ name, description, members });
       if (validation.error) {
         throw new Error(validation.error.details[0].message);
       }
@@ -332,7 +278,7 @@ class ChatController implements Controller {
         name,
         description,
         members, // Don't add creator to members - they're already in admins and createdBy
-        createdBy,
+        createdBy
       };
 
       const newGroup = await createGroup(groupData);
@@ -340,7 +286,7 @@ class ChatController implements Controller {
 
       res.status(201).json(newGroup);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -357,7 +303,7 @@ class ChatController implements Controller {
 
       res.status(200).json(group);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -372,7 +318,7 @@ class ChatController implements Controller {
       const groups = await getUserGroups(userId);
       res.status(200).json(groups);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -385,10 +331,7 @@ class ChatController implements Controller {
       const { groupId } = req.params;
       const updateData = req.body;
 
-      const validation = updateGroupValidation.validate({
-        groupId,
-        ...updateData,
-      });
+      const validation = updateGroupValidation.validate({ groupId, ...updateData });
       if (validation.error) {
         throw new Error(validation.error.details[0].message);
       }
@@ -398,7 +341,7 @@ class ChatController implements Controller {
 
       res.status(200).json(updatedGroup);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -421,7 +364,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Member added successfully" });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -443,7 +386,7 @@ class ChatController implements Controller {
 
       res.status(200).json({ message: "Member removed successfully" });
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 }

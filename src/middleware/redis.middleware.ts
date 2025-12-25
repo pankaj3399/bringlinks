@@ -6,9 +6,7 @@ class RedisClientMiddleware {
 
   constructor() {
     const redisUrl = (validateEnv as any).REDIS_URL as string | undefined;
-    const redisUrlTest = (validateEnv as any).REDIS_URL_TEST as
-      | string
-      | undefined;
+    const redisUrlTest = (validateEnv as any).REDIS_URL_TEST as string | undefined;
 
     if (validateEnv.NODE_ENV === "production") {
       // production instance

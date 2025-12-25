@@ -5,7 +5,6 @@ import {
   IRoles,
   IUserDocument,
   IUserPreferences,
-  IUsers,
 } from "./user.interface";
 import jwt from "../../utils/authentication/jwt.createtoken";
 import Logging from "../../library/logging";
@@ -14,11 +13,8 @@ import hashPass from "../../utils/hashPass";
 import { deleteAviIMG, retrieveIMG } from "../../utils/ImageServices/user.Img";
 import { checkImageUrl } from "../../utils/ImageServices/helperFunc.ts/checkImgUrlExpiration";
 import { validateAndUseSignupCode } from "../signupCode/signupCode.service";
+import { validateEnv } from "../../../config/validateEnv";
 import { use } from "passport";
-import { parseAllowedStates } from "../../utils/parseStates/allowedStates";
-import mongoose from "mongoose";
-import Rooms from "../room/room.model";
-import { RoomTypes } from "../room/room.interface";
 
 const getUserUsername = async (username: string) => {
   try {
@@ -129,63 +125,66 @@ export const requestPassword = async (userData: {
   }
 };
 
-const registerUser = async (userData: Partial<IUsers>) => {
+const registerUser = async (userData: any) => {
   try {
-    // Signup code is required for all registrations
-    if (!userData.signupCode) {
-      throw new Error("Signup code is required for registration");
-    }
+    const { auth, signupCode, state, ...userProfile } = userData;
+
+    const parseAllowedStates = (): string[] => {
+      const raw = validateEnv.ALLOWED_STATES || "";
+      return raw
+        .split(",")
+        .map((s) => s.trim().toLowerCase())
+        .filter((s) => !!s);
+    };
 
     const allowedStates = parseAllowedStates();
     const isFromAllowedState = allowedStates.includes(
-      (userData.state as string).trim().toLowerCase()
+      state.trim().toLowerCase()
     );
 
-    if (isFromAllowedState === false) {
-      throw new Error("Registration not available in your state");
+    // Case 1: State allowed → signupCode optional, but if provided must be valid
+    if (isFromAllowedState) {
+      if (signupCode) {
+        const isValidCode = await validateAndUseSignupCode(signupCode);
+        if (!isValidCode) {
+          throw new Error(
+            "Invalid signup code or code has reached maximum usage limit"
+          );
+        }
+      }
+      // Case 2: State NOT allowed → valid signupCode is required to register
+    } else {
+      if (!signupCode) {
+        throw new Error(
+          "Service not available in your state without a valid signup code"
+        );
+      }
+      const isValidCode = await validateAndUseSignupCode(signupCode);
+      if (!isValidCode) {
+        throw new Error(
+          "Invalid signup code or code has reached maximum usage limit"
+        );
+      }
     }
 
-    // Validate and use signup code
-    const isValidCode = await validateAndUseSignupCode(userData.signupCode);
-    if (!isValidCode) {
-      throw new Error(
-        "Invalid signup code or code has reached maximum usage limit"
-      );
-    }
-
-    const foundUser: IUserDocument = await User.findByUsername(
-      userData?.auth?.username as string
-    ).catch((err) => {
-      Logging.error(err);
-      throw err;
-    });
+    const foundUser: IUserDocument = await User.findByUsername(auth.username);
     if (foundUser) {
       throw new Error("The given username is already in use");
     }
 
-    const foundEmail = await User.findOne({
-      "auth.email": userData?.auth?.email as string,
-    }).catch((err) => {
-      Logging.error(err);
-      throw err;
-    });
+    const foundEmail = await User.findOne({ "auth.email": auth.email });
     if (foundEmail) {
       throw new Error("The given email is already in use");
     }
 
     const userToCreate = {
-      auth: userData.auth,
-      profile: userData.profile,
-      state: userData.state,
-      signupCode: userData.signupCode,
+      auth,
+      profile: userProfile.profile,
+      state,
       isVerified: true,
     };
 
-    const createdUser = await User.create(userToCreate).catch((err) => {
-      Logging.error(err);
-      throw err;
-    });
-
+    const createdUser = await User.create(userToCreate);
     Logging.log(`User created with signup code: ${createdUser._id}`);
 
     if (!createdUser) throw new Error("User registration failed");
@@ -206,13 +205,13 @@ const registerUser = async (userData: Partial<IUsers>) => {
         },
       }
     )
-      .select("-auth.password -role -refreshToken -signupCode")
+      .select("-auth.password -role -refreshToken")
       .clone()
       .exec();
 
     if (!userWithoutPassword) throw new Error("User not found");
 
-    return [userWithoutPassword, token];
+    return [userWithoutPassword, token, refreshToken];
   } catch (err: any) {
     Logging.error(`Registration error: ${err.message}`);
     throw err.message;
@@ -254,7 +253,7 @@ const loginUser = async (user: IUserDocument) => {
       },
       { new: true }
     )
-      .select("-auth.password -role -refreshToken -signupCode")
+      .select("-auth.password -role -refreshToken")
       .exec();
     if (foundUser.profile.avi.aviUrl) {
       // check if aviUrl is valid
@@ -278,7 +277,7 @@ const loginUser = async (user: IUserDocument) => {
             },
           },
           { new: true }
-        ).select("-auth.password -role -refreshToken -signupCode");
+        ).select("-auth.password -role -refreshToken");
 
         if (!updatedUser) throw new Error("User not updated");
         Logging.log(updatedUser.profile.avi.aviUrl);
@@ -305,7 +304,7 @@ export const updateUserPreferences = async (
           userPreferences,
         },
       }
-    ).select("-auth -role -refreshToken -signupCode");
+    ).select("-auth -role -refreshToken");
 
     if (!updatedUser) throw new Error("User not updated");
     return updatedUser;
@@ -344,7 +343,7 @@ const updatePassword = async (
     return foundedUser.populate({
       path: "auth",
       model: "User",
-      select: "-auth.password -role -refreshToken -signupCode",
+      select: "-auth.password -role -refreshToken",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -363,7 +362,7 @@ export const updateUser = async (
 
     const updatedUser = await User.findByIdAndUpdate({ _id: user_id }, user, {
       new: true,
-    }).select("-auth.password -role -refreshToken -signupCode");
+    }).select("-auth.password -role -refreshToken");
 
     if (!updatedUser) throw new Error("User is not updated");
 
@@ -470,7 +469,7 @@ const followerAUser = async (followee_id: string, user_id: string) => {
     return await foundUser.populate({
       path: "following",
       model: "User",
-      select: "auth.username",
+      select: "username",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -481,7 +480,7 @@ const getSchedule = async (user_Id: string) => {
   try {
     const userId = user_Id as string;
     const foundUser = await User.findById(userId)
-      .select("-auth.password -role -refreshToken -signupCode")
+      .select("-auth.password -role -refreshToken")
       .exec();
     if (!foundUser) throw new Error("User not found");
 
@@ -530,7 +529,7 @@ const findFollowers = async (user_id: string) => {
     return await foundUser.populate({
       path: "followers",
       model: "User",
-      select: "-auth.password, -role, -refreshToken, -signupCode",
+      select: "-password, role",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -545,7 +544,7 @@ const findFollowing = async (user_id: string) => {
     return await foundUser.populate({
       path: "following",
       model: "User",
-      select: "-auth.password, -role, -refreshToken, -signupCode",
+      select: "-auth.password, -role",
     });
   } catch (err: any) {
     Logging.error(err);
@@ -563,7 +562,7 @@ export const clearRefreshToken = async (userId: string) => {
         },
       }
     )
-      .select("-auth.password, -role -refreshToken -signupCode")
+      .select("-auth.password, -role")
       .exec()
       .catch((err: any) => {
         Logging.error(err);
@@ -598,7 +597,7 @@ export const addAviIMG = async (user_Id: string, fileName: string) => {
     throw err.message;
   }
 };
-export const getUserIMG = async (id: string) => {
+export const getIMG = async (id: string) => {
   try {
     const _id = id as string;
     const foundUser = await User.findOne({ _id: _id })
@@ -611,7 +610,7 @@ export const getUserIMG = async (id: string) => {
 
     if (foundUser.profile.avi?.aviUrl) return foundUser.profile.avi.aviUrl;
     if (!foundUser.profile.avi?.aviName) {
-      return "No Avatar";
+      throw new Error("User has no avatar set");
     }
 
     const imgUrl = await retrieveIMG(foundUser.profile.avi.aviName).catch(
@@ -660,24 +659,115 @@ export const deleteIMG = async (id: string) => {
   }
 };
 
+const getUserRecommendedRooms = async (userId: string) => {
+  try {
+    const recommendRooms = await User.aggregate([
+      {
+        $match: {
+          _id: userId as string,
+        },
+      },
+      {
+        $graphLookup: {
+          from: "User",
+          startWith: { $setUnion: ["$following", "$followers"] },
+          connectFromField: "following",
+          connectToField: "_id",
+          as: "network",
+          maxDepth: 3,
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          networkUserIds: "$network._id",
+        },
+      },
+      {
+        $lookup: {
+          from: "events",
+          let: { networkIds: "$networkUserIds" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $gt: [
+                    {
+                      $size: {
+                        $setIntersection: ["$attendees", "$$networkIds"],
+                      },
+                    },
+                    0,
+                  ],
+                },
+              },
+            },
+          ],
+          as: "networkEvents",
+        },
+      },
+      {
+        $lookup: {
+          from: "Rooms",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: ["$$userId", "$attendees"] },
+              },
+            },
+          ],
+          as: "userEvents",
+        },
+      },
+      {
+        $project: {
+          networkEvents: 1,
+          userEventIds: {
+            $map: {
+              input: "$userEvents",
+              as: "event",
+              in: "$$event._id",
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          recommendedEvents: {
+            $filter: {
+              input: "$networkEvents",
+              as: "recommend",
+              cond: {
+                $not: { $in: ["$$recommend._id", "$userEventIds"] },
+              },
+            },
+          },
+        },
+      },
+      { $unwind: "$recommendedEvents" },
+      { $replaceRoot: { newRoot: "$recommendedEvents" } },
+    ]);
+
+    return recommendRooms;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
+
 export const getUserRecommendRooms = async (
   userId: string,
-  page: number,
-  perPage: number,
-  filterByLocation: boolean | undefined = false
+  filterByLocation = false
 ) => {
   try {
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userObjectId = userId as string;
 
+    // Get user’s current location and radius (in miles)
     const user = await User.findById(userObjectId, {
       "profile.location.currentLocation.coordinates": 1,
       "profile.location.radiusPreference": 1,
-      following: 1,
-      followers: 1,
-      enteredRooms: 1,
-      userPreferences: 1,
     }).lean();
-    Logging.log(user);
 
     if (!user) throw new Error("User not found");
 
@@ -685,246 +775,124 @@ export const getUserRecommendRooms = async (
       user?.profile?.location?.currentLocation?.coordinates || [];
     const radiusPreference = user?.profile?.location?.radiusPreference || 20;
 
+    //const radiusInMeters = radiusInMiles * 1609.34; // miles to meters
+
     const now = new Date();
-    const userEnteredRoomIds = (user.enteredRooms || []).map(
-      (id: any) => new mongoose.Types.ObjectId(id)
-    );
 
-    const followingIds = (user.following || []).map(
-      (id: any) => new mongoose.Types.ObjectId(id)
-    );
-    const followerIds = (user.followers || []).map(
-      (id: any) => new mongoose.Types.ObjectId(id)
-    );
+    const aggregation = [
+      { $match: { _id: userObjectId } },
 
-    let networkUserIds = [
-      ...new Set([
-        ...followingIds.map((id) => id.toString()),
-        ...followerIds.map((id) => id.toString()),
-      ]),
-    ].map((id) => new mongoose.Types.ObjectId(id));
-
-    if (networkUserIds.length > 0) {
-      const secondDegreeUsers = await User.find(
-        { _id: { $in: networkUserIds } },
-        { following: 1, followers: 1 }
-      ).lean();
-
-      let secondDegreeIds: mongoose.Types.ObjectId[] = [];
-      for (const u of secondDegreeUsers) {
-        if (u.following && Array.isArray(u.following)) {
-          secondDegreeIds.push(
-            ...u.following.map((id: any) => new mongoose.Types.ObjectId(id))
-          );
-        }
-        if (u.followers && Array.isArray(u.followers)) {
-          secondDegreeIds.push(
-            ...u.followers.map((id: any) => new mongoose.Types.ObjectId(id))
-          );
-        }
-      }
-
-      const allNetworkIdsSet = new Set([
-        ...networkUserIds.map((id) => id.toString()),
-        ...secondDegreeIds.map((id) => id.toString()),
-      ]);
-      allNetworkIdsSet.delete(userObjectId.toString());
-      networkUserIds = Array.from(allNetworkIdsSet).map(
-        (id) => new mongoose.Types.ObjectId(id)
-      );
-    }
-
-    // Get event types from user's entered rooms
-    const enteredRoomTypes = await getEnteredRoomEventTypes(userEnteredRoomIds);
-
-    // Build preference-based search conditions
-    const preferenceConditions = buildPreferenceConditions(
-      user.userPreferences,
-      enteredRoomTypes
-    );
-
-    const hasNetwork = networkUserIds.length > 0;
-    const hasPreferences = preferenceConditions.length > 0;
-
-    if (!hasNetwork && !hasPreferences) {
-      Logging.info(
-        `User ${userId} has no network and no preferences - returning empty`
-      );
-      return [];
-    }
-
-    const roomMatchConditions: any[] = [
       {
-        "event_schedule.endDate": { $gt: now },
+        $graphLookup: {
+          from: "User",
+          startWith: { $setUnion: ["$following", "$followers"] },
+          connectFromField: "following",
+          connectToField: "_id",
+          as: "network",
+          maxDepth: 1,
+        },
       },
       {
-        $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+        $project: {
+          _id: 1,
+          networkUserIds: "$network._id",
+        },
       },
-    ];
-
-    const networkOrPreferenceConditions: any[] = [];
-
-    if (hasNetwork) {
-      networkOrPreferenceConditions.push({
-        entered_id: { $in: networkUserIds },
-      });
-    }
-
-    if (hasPreferences) {
-      networkOrPreferenceConditions.push({
-        $or: preferenceConditions,
-      });
-    }
-
-    roomMatchConditions.push({
-      $or: networkOrPreferenceConditions,
-    });
-
-    if (filterByLocation) {
-      if (lat == null || lng == null) {
-        throw new Error(
-          "Latitude and longitude must be provided when filterByLocation is true."
-        );
-      }
-      roomMatchConditions.push({
-        event_location: {
-          $nearSphere: {
-            $geometry: {
-              type: "Point",
-              coordinates: [lng, lat],
+      {
+        $lookup: {
+          from: "Rooms",
+          let: { networkIds: "$networkUserIds" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    {
+                      $gt: [
+                        {
+                          $size: {
+                            $setIntersection: ["$entered_id", "$$networkIds"],
+                          },
+                        },
+                        0,
+                      ],
+                    },
+                    { $gt: ["$event_schedule.endDate", Date.now()] },
+                  ],
+                },
+              },
             },
-            $maxDistance: radiusPreference * 1609.34,
+            ...(filterByLocation && lat && lng
+              ? [
+                  {
+                    $match: {
+                      event_location: {
+                        $nearSphere: {
+                          $geometry: {
+                            type: "Point",
+                            coordinates: [lng, lat],
+                          },
+                          $maxDistance: radiusPreference,
+                        },
+                      },
+                    },
+                  },
+                ]
+              : []),
+          ],
+          as: "networkRooms",
+        },
+      },
+      {
+        $lookup: {
+          from: "rooms",
+          let: { userId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: ["$$userId", "$entered_id"] },
+              },
+            },
+          ],
+          as: "userRooms",
+        },
+      },
+      {
+        $project: {
+          networkRooms: 1,
+          userRoomIds: {
+            $map: {
+              input: "$userRooms",
+              as: "room",
+              in: "$$room._id",
+            },
           },
         },
-      });
-    }
-
-    if (userEnteredRoomIds.length > 0) {
-      roomMatchConditions.push({
-        _id: { $nin: userEnteredRoomIds },
-      });
-    }
-
-    const recommendedRooms = await Rooms.find({
-      $and: roomMatchConditions,
-    })
-      .populate([
-        {
-          path: "created_user",
-          model: "User",
-          select: "_id auth.username profile.firstName profile.avi",
+      },
+      {
+        $project: {
+          recommendedRooms: {
+            $filter: {
+              input: "$networkRooms",
+              as: "room",
+              cond: {
+                $not: { $in: ["$$room._id", "$userRoomIds"] },
+              },
+            },
+          },
         },
-        {
-          path: "event_admin",
-          model: "User",
-          select: "_id auth.username profile.firstName profile.avi",
-        },
-      ])
-      .lean()
-      .sort({ "event_schedule.startDate": 1, "stats.score": -1 })
-      .skip(page * perPage - perPage)
-      .limit(perPage);
+      },
+      { $unwind: "$recommendedRooms" },
+      { $replaceRoot: { newRoot: "$recommendedRooms" } },
+    ];
 
-    Logging.info(
-      `Found ${recommendedRooms.length} recommended rooms for user ${userId}`
-    );
-
-    return recommendedRooms;
+    const results = await User.aggregate(aggregation);
+    return results;
   } catch (err: any) {
     Logging.error(err);
     throw err;
   }
 };
-
-/**
- * Fetches event_type and event_typeOther from user's entered rooms
- */
-async function getEnteredRoomEventTypes(
-  enteredRoomIds: mongoose.Types.ObjectId[]
-): Promise<{ eventTypes: RoomTypes[]; eventTypeOthers: string[] }> {
-  if (!enteredRoomIds.length) {
-    return { eventTypes: [], eventTypeOthers: [] };
-  }
-
-  const enteredRooms = await Rooms.find(
-    { _id: { $in: enteredRoomIds } },
-    { event_type: 1, event_typeOther: 1 }
-  ).lean();
-
-  const eventTypes: RoomTypes[] = [];
-  const eventTypeOthers: string[] = [];
-
-  for (const room of enteredRooms) {
-    if (room.event_type && !eventTypes.includes(room.event_type)) {
-      eventTypes.push(room.event_type);
-    }
-    if (
-      room.event_typeOther &&
-      !eventTypeOthers.includes(room.event_typeOther)
-    ) {
-      eventTypeOthers.push(room.event_typeOther);
-    }
-  }
-
-  return { eventTypes, eventTypeOthers };
-}
-
-/**
- * Builds MongoDB query conditions based on user preferences AND entered room history
- */
-function buildPreferenceConditions(
-  userPreferences?: IUserPreferences,
-  enteredRoomTypes?: { eventTypes: RoomTypes[]; eventTypeOthers: string[] }
-): any[] {
-  const conditions: any[] = [];
-
-  // From explicit user preferences
-  if (userPreferences?.favoriteTypesOfRooms?.length) {
-    for (const pref of userPreferences.favoriteTypesOfRooms) {
-      if (pref.title) {
-        conditions.push({ event_type: pref.title });
-      }
-
-      if (pref.name) {
-        const escapedName = escapeRegex(pref.name);
-        const regexPattern = new RegExp(escapedName, "i");
-
-        conditions.push({ event_typeOther: regexPattern });
-        conditions.push({ event_description: regexPattern });
-      }
-    }
-  }
-
-  // From entered rooms history
-  if (enteredRoomTypes) {
-    // Match rooms with same event_type as previously entered
-    if (enteredRoomTypes.eventTypes.length > 0) {
-      conditions.push({
-        event_type: { $in: enteredRoomTypes.eventTypes },
-      });
-    }
-
-    // Match rooms with similar event_typeOther (partial match)
-    for (const otherType of enteredRoomTypes.eventTypeOthers) {
-      if (otherType) {
-        const escapedType = escapeRegex(otherType);
-        const regexPattern = new RegExp(escapedType, "i");
-
-        conditions.push({ event_typeOther: regexPattern });
-        conditions.push({ event_description: regexPattern });
-      }
-    }
-  }
-
-  return conditions;
-}
-
-/**
- * Escapes special regex characters in a string
- */
-function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export {
   getUserUsername,

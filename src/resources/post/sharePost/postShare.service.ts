@@ -1,5 +1,9 @@
 import mongoose from "mongoose";
-import PostShare, { PostSharePlatform, PostShareType } from "./postShare.model";
+import PostShare, {
+  IPostShare,
+  PostSharePlatform,
+  PostShareType,
+} from "./postShare.model";
 import Posts from "../post.model";
 import { validateEnv } from "../../../../config/validateEnv";
 import Logging from "../../../library/logging";

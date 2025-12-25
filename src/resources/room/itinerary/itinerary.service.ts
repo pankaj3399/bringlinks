@@ -1,6 +1,9 @@
+import { Iitinerary, ItineraryModel } from "./itinerary.interface";
 import Itinerary from "./itinerary.model";
 import { ItineraryDocument } from "./itinerary.interface";
 import Rooms from "../room.model";
+import mongoose from "mongoose";
+import { IRoomsDocument } from "../room.interface";
 import Logging from "../../../library/logging";
 
 export const getItineraryById = async (_id: string) => {
@@ -98,8 +101,7 @@ export const deleteItinerary = async (_id: string, room_Id: string) => {
 
     const deletedItinerary = await Itinerary.deleteOne({ _id: itineraryId });
 
-    if (deletedItinerary.deletedCount === 0)
-      throw new Error("Itinerary not deleted");
+    if (deletedItinerary.deletedCount === 0) throw new Error("Itinerary not deleted");
 
     return { success: true, deletedCount: deletedItinerary.deletedCount };
   } catch (err: any) {

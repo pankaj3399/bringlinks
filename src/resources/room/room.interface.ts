@@ -96,23 +96,6 @@ export enum RoomTypes {
   wedding = "Wedding",
   other = "Other",
 }
-export interface RoomFilters {
-  timeStart?: string;
-  timeEnd?: string;
-  priceMin?: number;
-  priceMax?: number;
-  dateStart?: string;
-  dateEnd?: string;
-  miles?: number;
-  lat?: number;
-  lng?: number;
-  eventType?: string;
-}
-
-export interface Pagination {
-  limit: number;
-  page: number;
-}
 
 export interface IRoomsDocument extends IRooms, Document {
   // instance queries

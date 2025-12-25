@@ -1,4 +1,7 @@
 import Friend from "./friends.model";
+import { IFriends } from "./friends.interface";
+import mongoose from "mongoose";
+import User from "../user.model";
 
 export const addFriend = async (user_Id: string, friend_Id: string) => {
   try {

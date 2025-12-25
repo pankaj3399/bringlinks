@@ -1,17 +1,24 @@
 import { NextFunction, Router, Request, Response } from "express";
-import { RequiredAuth } from "../../../middleware/auth.middleware";
+import {
+  RequiredAuth,
+  RequiredPaidRoomEntry,
+} from "../../../middleware/auth.middleware";
 import HttpException from "../../../middleware/exceptions/http.exception";
 import Logging from "../../../library/logging";
 import Controller from "../../../utils/interfaces/controller.interface";
 import {
   createItinerary,
   deleteItinerary,
+  getItineraryById,
   getItineraryByRoomId,
   updateItinerary,
 } from "./itinerary.service";
+import mongoose from "mongoose";
+import { IRoomsDocument } from "../room.interface";
 import { roomAdminPermissions } from "../../../middleware/authorization.middleware";
 import validate from "./itinerary.validation";
 import validationMiddleware from "../../../middleware/val.middleware";
+
 
 class ItineraryController implements Controller {
   public path = "/itinerary";
@@ -57,16 +64,13 @@ class ItineraryController implements Controller {
       const { userId, roomId } = req.params;
       if (!userId || !roomId) throw new Error("Id is required");
 
-      const createdItinerary = await createItinerary(
-        req.body as any,
-        roomId as any
-      );
+      const createdItinerary = await createItinerary(req.body as any, roomId as any);
       if (!createdItinerary) throw new Error("Itinerary not created");
 
       Logging.info(createdItinerary);
       res.status(201).json(createdItinerary);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -85,7 +89,7 @@ class ItineraryController implements Controller {
       Logging.info(foundItinerary);
       return res.status(200).json(foundItinerary);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
   private updateItinerary = async (
@@ -107,7 +111,7 @@ class ItineraryController implements Controller {
       Logging.info(updatedItineraryById);
       return res.status(200).json(updatedItineraryById);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
   private deleteItinerary = async (
@@ -128,12 +132,11 @@ class ItineraryController implements Controller {
       );
       Logging.info(deletedItinerary);
 
-      if (!deletedItinerary)
-        return res.status(400).send("Itinerary not deleted");
+      if (!deletedItinerary) return res.status(400).send("Itinerary not deleted");
 
       return res.status(200).json(deletedItinerary);
     } catch (err: any) {
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 }

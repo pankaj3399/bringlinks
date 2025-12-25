@@ -1,4 +1,5 @@
 import Joi from "joi";
+import { ObjectId } from "mongoose";
 
 const createComment = Joi.object().keys({
   content: Joi.string().required(),

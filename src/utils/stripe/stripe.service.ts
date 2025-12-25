@@ -2,38 +2,29 @@ import Stripe from "stripe";
 import { validateEnv } from "../../../config/validateEnv";
 import Logging from "../../library/logging";
 
-class StripeService {
-  private stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
-  private stripe: Stripe;
+const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
+if (!stripeApiKey) {
+  throw new Error("Missing STRIPE_SECRET_KEY in env");
+}
 
-  constructor() {
-    if (!this.stripeApiKey) {
-      throw new Error("Missing STRIPE_SECRET_KEY in env");
-    }
-    this.stripe = new Stripe(this.stripeApiKey, {
-      apiVersion: "2025-10-29.clover",
-    });
+const stripe = new Stripe(stripeApiKey, {
+  apiVersion: "2025-09-30.clover",
+});
+
+export class StripeService {
+ 
+  private static getPlatformFeeRate(unitAmountUsd: number): number{
+    if (unitAmountUsd <= 60) return 0.06; 
+    if (unitAmountUsd <= 90) return 0.047; 
+    return 0.037; 
   }
 
-  private getPlatformFeeRate(unitAmountUsd: number): number {
-    if (unitAmountUsd <= 60) return 0.06;
-    if (unitAmountUsd <= 90) return 0.049;
-    return 0.039;
-  }
-
-  public async createConnectAccount(
-    userId: string,
-    email: string,
-    country: string = "US"
-  ) {
+  static async createConnectAccount(userId: string, email: string, country: string = "US") {
     try {
-      const account = await this.stripe.accounts.create({
+      const account = await stripe.accounts.create({
         type: "express",
         country: country,
         email: email,
-        metadata: {
-          userId: userId,
-        },
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true },
@@ -52,19 +43,13 @@ class StripeService {
       return account;
     } catch (error: any) {
       Logging.error(`Stripe Connect account creation error: ${error.message}`);
-      throw new Error(
-        `Failed to create Stripe Connect account: ${error.message}`
-      );
+      throw new Error(`Failed to create Stripe Connect account: ${error.message}`);
     }
   }
 
-  public async createAccountLink(
-    accountId: string,
-    returnUrl: string,
-    refreshUrl: string
-  ) {
+   static async createAccountLink(accountId: string, returnUrl: string, refreshUrl: string) {
     try {
-      const accountLink = await this.stripe.accountLinks.create({
+      const accountLink = await stripe.accountLinks.create({
         account: accountId,
         return_url: returnUrl,
         refresh_url: refreshUrl,
@@ -79,9 +64,10 @@ class StripeService {
     }
   }
 
-  public async getAccount(accountId: string) {
+
+  static async getAccount(accountId: string) {
     try {
-      const account = await this.stripe.accounts.retrieve(accountId);
+      const account = await stripe.accounts.retrieve(accountId);
       return account;
     } catch (error: any) {
       Logging.error(`Stripe account retrieval error: ${error.message}`);
@@ -89,9 +75,10 @@ class StripeService {
     }
   }
 
-  public async createLoginLink(accountId: string) {
+
+  static async createLoginLink(accountId: string) {
     try {
-      const loginLink = await this.stripe.accounts.createLoginLink(accountId);
+      const loginLink = await stripe.accounts.createLoginLink(accountId);
       return loginLink;
     } catch (error: any) {
       Logging.error(`Stripe login link creation error: ${error.message}`);
@@ -99,10 +86,10 @@ class StripeService {
     }
   }
 
-  public async isAccountReady(accountId: string): Promise<boolean> {
+  static async isAccountReady(accountId: string): Promise<boolean> {
     try {
       const account = await this.getAccount(accountId);
-
+      
       return (
         account.details_submitted === true &&
         account.charges_enabled === true &&
@@ -116,7 +103,7 @@ class StripeService {
     }
   }
 
-  public async createPaymentIntent(
+  static async createPaymentIntent(
     amount: number,
     currency: string = "usd",
     connectedAccountId: string,
@@ -124,16 +111,16 @@ class StripeService {
   ) {
     try {
       const platformFeeRate = this.getPlatformFeeRate(amount);
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount: Math.round(amount * 100),
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(amount * 100), 
         currency: currency,
-        application_fee_amount: Math.round(amount * platformFeeRate * 100),
+        application_fee_amount: Math.round(amount *platformFeeRate * 100), 
         transfer_data: {
           destination: connectedAccountId,
         },
         metadata: {
           ...metadata,
-          platform: "Bringing Link Ups",
+          platform: "bringlinks",
         },
       });
 
@@ -145,19 +132,19 @@ class StripeService {
     }
   }
 
-  public async createTransfer(
+  static async createTransfer(
     amount: number,
     connectedAccountId: string,
     metadata: Record<string, string> = {}
   ) {
     try {
-      const transfer = await this.stripe.transfers.create({
-        amount: Math.round(amount * 100),
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(amount * 100), 
         currency: "usd",
         destination: connectedAccountId,
         metadata: {
           ...metadata,
-          platform: "Bringing Link Ups",
+          platform: "bringlinks",
         },
       });
 
@@ -169,9 +156,9 @@ class StripeService {
     }
   }
 
-  public async getAccountBalance(accountId: string) {
+  static async getAccountBalance(accountId: string) {
     try {
-      const balance = await this.stripe.balance.retrieve({
+      const balance = await stripe.balance.retrieve({
         stripeAccount: accountId,
       });
 
@@ -182,9 +169,9 @@ class StripeService {
     }
   }
 
-  public async listTransfers(connectedAccountId: string, limit: number = 10) {
+  static async listTransfers(connectedAccountId: string, limit: number = 10) {
     try {
-      const transfers = await this.stripe.transfers.list({
+      const transfers = await stripe.transfers.list({
         destination: connectedAccountId,
         limit: limit,
       });
@@ -196,8 +183,8 @@ class StripeService {
     }
   }
 
-  public async createCheckoutSession(params: {
-    amount: number;
+  static async createCheckoutSession(params: {
+    amount: number; 
     currency?: string;
     connectedAccountId: string;
     successUrl: string;
@@ -221,7 +208,7 @@ class StripeService {
     const platformFeeRate = this.getPlatformFeeRate(amount);
     const appFee = Math.round(amount * quantity * platformFeeRate * 100);
 
-    const session = await this.stripe.checkout.sessions.create({
+    const session = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [
         {
@@ -237,7 +224,7 @@ class StripeService {
       cancel_url: cancelUrl,
       metadata: {
         ...metadata,
-        platform: "Bringing Link Ups",
+        platform: "bringlinks",
       },
       payment_intent_data: {
         application_fee_amount: appFee,
@@ -246,7 +233,7 @@ class StripeService {
         },
         metadata: {
           ...metadata,
-          platform: "Bringing Link Ups",
+          platform: "bringlinks",
         },
       },
     });
@@ -254,19 +241,19 @@ class StripeService {
     return session;
   }
 
-  public async createPayout(
-    connectedAccountId: string,
-    amountCents: number,
-    currency: string = "usd"
-  ) {
-    const payout = await this.stripe.payouts.create(
-      { amount: amountCents, currency },
-      {
-        stripeAccount: connectedAccountId,
-      }
-    );
+  static async createPayout(connectedAccountId: string, amountCents: number, currency: string = "usd") {
+    const payout = await stripe.payouts.create({ amount: amountCents, currency }, {
+      stripeAccount: connectedAccountId,
+    });
     return payout;
   }
 }
 
-export default new StripeService();
+export default StripeService;
+
+
+
+
+
+
+

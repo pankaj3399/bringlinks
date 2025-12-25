@@ -105,7 +105,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error sending signup code request: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -140,7 +140,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error generating signup code: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -166,7 +166,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error validating signup code: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -189,7 +189,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error fetching signup codes: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -207,7 +207,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error fetching all active signup codes: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -244,7 +244,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error updating signup code: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 
@@ -279,7 +279,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error deactivating signup code: ${err.message}`);
-      return next(new HttpException(400, err.message));
+      next(new HttpException(400, err.message));
     }
   };
 }

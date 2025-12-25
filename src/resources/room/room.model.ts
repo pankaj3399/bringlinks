@@ -290,9 +290,7 @@ RoomSchema.index({
   event_name: "text",
   event_type: "text",
   event_description: "text",
-  "event_location_address.city": "text",
-  "event_location_address.state": "text",
-  "event_location_address.street_address": "text",
+  event_location_address: "text",
   event_schedule: "text",
   event_typeOther: "text",
 });

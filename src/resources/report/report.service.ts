@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import { IReport } from "./report.interface";
+import { IMGNames, IRoomsDocument } from "../room/room.interface";
+import { IUserDocument } from "../user/user.interface";
 import Report from "./report.model";
 var toId = mongoose.Types.ObjectId;
 

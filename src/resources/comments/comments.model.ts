@@ -21,37 +21,6 @@ const commentSchema = new Schema<IComments>(
       type: Date,
       default: Date.now,
     },
-    likes: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Likes",
-      },
-    ],
-    likes_count: {
-      type: Number,
-      default: 0,
-    },
-    stats: {
-      views: {
-        type: Number,
-        default: 0,
-      },
-      totalSecondsViewed: {
-        type: Number,
-        default: 0,
-      },
-      score: {
-        type: Number,
-        default: 0,
-      },
-    },
-    commentReply: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Comments",
-        default: null,
-      },
-    ],
   },
   { timestamps: true }
 );

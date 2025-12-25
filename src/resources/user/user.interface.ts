@@ -46,7 +46,6 @@ export interface IUserProfile {
   location: Location;
   privacy: ProfilePrivacy;
   demographic: Demo;
-  bio: string;
   bookmarks: bookmarkType[];
 }
 
@@ -84,7 +83,6 @@ export interface CurrentLo {
   coordinates: [number, number];
   venue: string;
 }
-
 export enum Types {
   Point = "Point",
   Polygon = "Polygon",
@@ -96,11 +94,11 @@ export interface Demo {
   culture: Culture;
 }
 export enum GenderType {
-  Male = "Male",
-  Female = "Female",
-  Transgender = "Transgender",
-  NonBinary = "NonBinary",
-  NoAnswer = "NoAnswer",
+  Male,
+  Female,
+  Transgender,
+  NonBinary,
+  NoAnswer,
 }
 
 export enum Culture {

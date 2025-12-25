@@ -1,9 +1,10 @@
 import Joi from "joi";
+import { ObjectId } from "mongoose";
 
 const createPost = Joi.object().keys({
   content: Joi.object()
     .keys({
-      name: Joi.string().min(1).max(200).optional(),
+      name: Joi.string().min(1).max(200).required(),
       url: Joi.string().optional().allow(""),
     })
     .required(),
@@ -19,7 +20,7 @@ const createPost = Joi.object().keys({
 const updatePost = Joi.object().keys({
   content: Joi.object()
     .keys({
-      name: Joi.string().min(0).max(200).optional(),
+      name: Joi.string().min(0).max(200).required(),
       url: Joi.string().optional().allow(""),
     })
     .required(),

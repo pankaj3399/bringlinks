@@ -1,4 +1,4 @@
-import { Schema, model } from "mongoose";
+import mongoose, { Schema, model } from "mongoose";
 import { ISignupCodeDocument, ISignupCodeModel } from "./signupCode.interface";
 
 const SignupCodeSchema = new Schema<ISignupCodeDocument>(
@@ -59,8 +59,8 @@ SignupCodeSchema.statics.findActiveCode = function (code: string) {
     $or: [
       { expiresAt: { $exists: false } },
       { expiresAt: null },
-      { expiresAt: { $gt: new Date() } },
-    ],
+      { expiresAt: { $gt: new Date() } }
+    ]
   });
 };
 
@@ -71,8 +71,8 @@ SignupCodeSchema.statics.incrementUsage = async function (code: string) {
     $or: [
       { expiresAt: { $exists: false } },
       { expiresAt: null },
-      { expiresAt: { $gt: new Date() } },
-    ],
+      { expiresAt: { $gt: new Date() } }
+    ]
   });
 
   if (!existingCode || existingCode.currentUsages >= existingCode.maxUsages) {
@@ -87,11 +87,11 @@ SignupCodeSchema.statics.incrementUsage = async function (code: string) {
       $or: [
         { expiresAt: { $exists: false } },
         { expiresAt: null },
-        { expiresAt: { $gt: new Date() } },
-      ],
+        { expiresAt: { $gt: new Date() } }
+      ]
     },
     {
-      $inc: { currentUsages: 1 },
+      $inc: { currentUsages: 1 }
     },
     { new: true }
   );
@@ -104,8 +104,5 @@ SignupCodeSchema.statics.incrementUsage = async function (code: string) {
   return signupCode;
 };
 
-const SignupCode = model<ISignupCodeDocument, ISignupCodeModel>(
-  "SignupCode",
-  SignupCodeSchema
-);
+const SignupCode = model<ISignupCodeDocument, ISignupCodeModel>("SignupCode", SignupCodeSchema);
 export default SignupCode;

@@ -58,11 +58,6 @@ const UserSchema = new Schema<IUserDocument>(
         maxlength: 30,
         trim: true,
       },
-      bio: {
-        type: String,
-        maxlength: 500,
-        trim: true,
-      },
       location: {
         radiusPreference: {
           type: Number,
@@ -213,6 +208,10 @@ const UserSchema = new Schema<IUserDocument>(
         return user.role === IRoles.CREATOR ? true : false;
       },
     },
+    wallet: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Wallet",
+    },
     followers: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -244,7 +243,6 @@ const UserSchema = new Schema<IUserDocument>(
     isVerified: { type: Boolean, default: false },
     // appleId: { type: String },
     googleId: { type: String },
-    signupCode: { type: String },
   },
   { timestamps: true, minimize: false }
 );
@@ -309,10 +307,13 @@ UserSchema.pre("save", async function (next) {
     next();
   }
 
-  if (user.isModified("profile.birthDate")) {
-    user.profile.demographic.age = UserSchema.methods.setAge(
-      user.profile.birthDate
+  if (!user.isModified("profile.birthDate")) {
+    return next();
+  } else {
+    (user as any).profile.demographic.age = (UserSchema.methods as any).setAge(
+      (user as any).profile.birthDate
     );
+    next();
   }
 
   next();

@@ -5,8 +5,16 @@ import {
   EventScheduleType,
   RoomPrivacy,
   RoomTypes,
+  TimeSchedule,
 } from "./room.interface";
 import { CurrentLo } from "resources/user/user.interface";
+import {
+  IPaidRooms,
+  PricingTiers,
+  Tickets,
+  Tiers,
+} from "./paidRooms/paidRoom.interface";
+import { start } from "repl";
 
 // Validation for services
 const createRoom = Joi.object().keys({
@@ -51,8 +59,7 @@ const createRoom = Joi.object().keys({
       )
       .required(),
   }),
-  paid: Joi.boolean().required(),
-  paidRoom: Joi.string<ObjectId>().optional(),
+  paidRoom: Joi.string<ObjectId>(),
 });
 
 const editARoom = Joi.object().keys({
@@ -61,6 +68,9 @@ const editARoom = Joi.object().keys({
   event_privacy: Joi.string().valid(RoomPrivacy.private, RoomPrivacy.public),
   event_type: Joi.string<RoomTypes>().required(),
   event_typeOther: Joi.string<string>().min(3).max(15).optional(),
+  event_IncomingRequests: Joi.array<ObjectId>()
+    .items(Joi.string<ObjectId>())
+    .optional(),
   event_name: Joi.string<string>().min(2).max(30).required(),
   event_location_address: Joi.object<Address>().keys({
     street_address: Joi.string().required(),
@@ -128,6 +138,9 @@ const validateRoomFindBy = Joi.object({
     state: Joi.string().optional(),
   }).optional(),
   entered_id: Joi.string().optional(),
+  event_location: Joi.object({
+    category: Joi.string().optional(),
+  }).optional(),
   event_schedule: Joi.object({
     startDate: Joi.string().pattern(
       new RegExp(/^(1[0-2]|0?[1-9]):[0-5][0-9] [APap][Mm]$/)
@@ -136,9 +149,6 @@ const validateRoomFindBy = Joi.object({
       new RegExp(/^(1[0-2]|0?[1-9]):[0-5][0-9] [APap][Mm]$/)
     ),
   }).optional(),
-  event_location: Joi.object({
-    venue: Joi.string().optional(),
-  }),
 }).or(
   "_id",
   "event_name",
@@ -148,8 +158,7 @@ const validateRoomFindBy = Joi.object({
   "entered_id",
   "event_location.category",
   "event_schedule.startDate",
-  "event_schedule.endDate",
-  "event_location.venue"
+  "event_schedule.endDate"
 );
 
 const addSpecialGuest = Joi.object().keys({

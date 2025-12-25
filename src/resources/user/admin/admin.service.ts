@@ -52,14 +52,14 @@ export const registerAdmin = async (userData: any) => {
         },
       }
     )
-      .select("-auth.password -role -refreshToken -adminSecret")
+      .select("-auth.password -role -refreshToken")
       .clone()
       .exec();
 
     if (!userWithoutPassword)
       throw new Error("Admin user not found after creation");
 
-    return [userWithoutPassword, token];
+    return [userWithoutPassword, token, refreshToken];
   } catch (err: any) {
     Logging.error(`Admin registration error: ${err.message}`);
     throw err.message;

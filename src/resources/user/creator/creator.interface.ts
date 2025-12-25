@@ -1,4 +1,5 @@
 import mongoose, { Document, Model } from "mongoose";
+import { IRoles } from "../user.interface";
 
 export enum StripeAccountStatus {
   PENDING = "pending",
@@ -8,10 +9,13 @@ export enum StripeAccountStatus {
 
 export interface ICreator extends Document {
   userId: mongoose.Types.ObjectId;
-  signupCode: string;
+  signupCode: string;  
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
   stripeConnectAccountId?: string;
   stripeAccountStatus?: StripeAccountStatus;
-  stripeAccountLink?: string;
+  stripeAccountLink?: string; 
   reviews: IReviews[];
   createdRooms: mongoose.Types.ObjectId[];
   userScore: Score;
@@ -25,7 +29,10 @@ export interface ICreator extends Document {
 
 export interface ICreatorRegistrationRequest {
   userId: string;
-  signupCode: string;
+  signupCode: string; 
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
 }
 
 export interface ICreatorSignupRequest {
@@ -34,7 +41,10 @@ export interface ICreatorSignupRequest {
   firstName: string;
   lastName: string;
   state: string;
-  signupCode: string;
+  signupCode: string; 
+  portfolio?: string;
+  socialMedia?: string[];
+  experience?: string;
 }
 
 export interface IStripeConnectOnboardingResponse {

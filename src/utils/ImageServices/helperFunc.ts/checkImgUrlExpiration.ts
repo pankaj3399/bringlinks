@@ -1,11 +1,6 @@
 // check if the image url is valid
 export const checkImageUrl = (signedUrl: string) => {
   try {
-    //check if it is a url
-    if (!signedUrl.startsWith("http")) {
-      return false;
-    }
-
     const url = new URL(signedUrl);
 
     // Extract expiration and signing timestamp
