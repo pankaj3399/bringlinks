@@ -1,4 +1,4 @@
-import mongoose, { model, Schema } from "mongoose";
+import { model, Schema } from "mongoose";
 import { ItineraryDocument, ItineraryModel } from "./itinerary.interface";
 
 const ItinerarySchema = new Schema<ItineraryDocument>({

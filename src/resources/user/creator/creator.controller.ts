@@ -7,17 +7,16 @@ import {
   signupAsCreator,
   registerCreator,
   getCreatorByUserId,
-  getCreatorById,
   updateCreatorProfile,
   canCreatePaidRooms,
   initiateStripeConnectOnboarding,
   getStripeConnectStatus,
   completeStripeConnectOnboarding,
   getCreatorEarnings,
+  getReviewsByCreatorId,
 } from "./creator.service";
 import validationMiddleware from "../../../middleware/val.middleware";
 import validate from "./creator.validation";
-import Logging from "../../../library/logging";
 
 class CreatorController implements Controller {
   public path = "/creator";
@@ -35,7 +34,7 @@ class CreatorController implements Controller {
     );
 
     this.router.post(
-      `${this.path}/register`,
+      `${this.path}/register/:userId`,
       RequiredAuth,
       isUserAccount,
       validationMiddleware(validate.creatorRegistration),
@@ -47,6 +46,12 @@ class CreatorController implements Controller {
       RequiredAuth,
       isUserAccount,
       this.getCreatorProfileByUserId
+    );
+
+    this.router.get(
+      `${this.path}/profile/:creatorId`,
+      RequiredAuth,
+      this.getCreatorReviews
     );
 
     this.router.put(
@@ -99,13 +104,13 @@ class CreatorController implements Controller {
   ): Promise<Response | void> => {
     try {
       const result = await signupAsCreator(req.body);
-      res.status(201).json({ 
-        success: true, 
-        message: "Creator signed up successfully", 
-        ...result
+      res.status(201).json({
+        success: true,
+        message: "Creator signed up successfully",
+        ...result,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -119,15 +124,38 @@ class CreatorController implements Controller {
       if (!userId) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      
+
       const creator = await registerCreator({ userId, ...req.body });
-      res.status(201).json({ 
-        success: true, 
-        message: "Creator registered successfully", 
-        creator 
+      res.status(201).json({
+        success: true,
+        message: "Creator registered successfully",
+        creator,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private getCreatorReviews = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { creatorId } = req.params;
+
+      if (!creatorId) {
+        return res.status(401).json({ message: "Id is required" });
+      }
+
+      const reviews = await getReviewsByCreatorId(creatorId);
+      res.status(200).json({
+        success: true,
+        message: "Creator reviews fetched successfully",
+        reviews,
+      });
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -144,7 +172,7 @@ class CreatorController implements Controller {
       }
       res.status(200).json({ success: true, creator });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -157,15 +185,17 @@ class CreatorController implements Controller {
       const { creatorId } = req.params;
       const updatedCreator = await updateCreatorProfile(creatorId, req.body);
       if (!updatedCreator) {
-        return res.status(404).json({ message: "Creator not found or update failed" });
+        return res
+          .status(404)
+          .json({ message: "Creator not found or update failed" });
       }
-      res.status(200).json({ 
-        success: true, 
-        message: "Creator profile updated successfully", 
-        creator: updatedCreator 
+      res.status(200).json({
+        success: true,
+        message: "Creator profile updated successfully",
+        creator: updatedCreator,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -182,7 +212,7 @@ class CreatorController implements Controller {
       const eligibility = await canCreatePaidRooms(userId);
       res.status(200).json({ success: true, ...eligibility });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -199,7 +229,7 @@ class CreatorController implements Controller {
       const earnings = await getCreatorEarnings(userId);
       res.status(200).json({ success: true, earnings });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -215,7 +245,11 @@ class CreatorController implements Controller {
       }
       const { returnUrl, refreshUrl } = req.body;
 
-      const stripeConnect = await initiateStripeConnectOnboarding(userId, returnUrl, refreshUrl);
+      const stripeConnect = await initiateStripeConnectOnboarding(
+        userId,
+        returnUrl,
+        refreshUrl
+      );
 
       res.status(200).json({
         success: true,
@@ -223,7 +257,7 @@ class CreatorController implements Controller {
         stripeConnect,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -240,7 +274,7 @@ class CreatorController implements Controller {
       const status = await getStripeConnectStatus(userId);
       res.status(200).json({ success: true, stripeConnect: status });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -255,13 +289,13 @@ class CreatorController implements Controller {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const result = await completeStripeConnectOnboarding(userId);
-      res.status(200).json({ 
-        success: true, 
+      res.status(200).json({
+        success: true,
         message: "Stripe Connect completed successfully",
-        stripeConnect: result 
+        stripeConnect: result,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }

@@ -38,7 +38,7 @@ export const buyTickets = async (
   receiptId: string
 ) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
     const foundRoom = await Rooms.findById(room_Id);
 
@@ -50,11 +50,11 @@ export const buyTickets = async (
     }
 
     const paid_Room = await PaidRoom.updateOne(
-      { roomId: room_Id },
+      { "tickets.roomId": room_Id },
       {
         $addToSet: {
-          paidUsers: paidRoom.paidUsers,
-          receiptId,
+          "tickets.paidUsers": paidRoom.tickets.paidUsers,
+          "tickets.receiptId": receiptId,
         },
         $inc: {
           "tickets.totalSold": 1,
@@ -67,7 +67,8 @@ export const buyTickets = async (
             ? paidRoom.tickets.pricing.reduce((acc: number, curr: any) => {
                 const price = Number(curr?.price ?? 0);
                 const sold = Number(curr?.sold ?? 0);
-                if (!Number.isFinite(price) || !Number.isFinite(sold)) return acc;
+                if (!Number.isFinite(price) || !Number.isFinite(sold))
+                  return acc;
                 return acc + price * sold;
               }, 0)
             : 0,
@@ -84,7 +85,8 @@ export const buyTickets = async (
       { _id: room_Id },
       {
         $addToSet: { entered_id: user_Id },
-      }
+      },
+      { new: true }
     ).populate({
       path: "paidRoom",
       model: "PaidRooms",
@@ -105,7 +107,7 @@ export const buyTickets = async (
 
 export const updatePaidRoom = async (room: IPaidRooms) => {
   try {
-    const foundRoom = await Rooms.findById(room.roomId);
+    const foundRoom = await Rooms.findById(room.tickets.roomId);
     if (!foundRoom) throw new Error("Paid room not found");
 
     const updatedRoom = await PaidRoom.updateOne(
@@ -127,16 +129,22 @@ export const updatePaidRoom = async (room: IPaidRooms) => {
 
 export const deletePaidRoom = async (roomId: string) => {
   try {
-    const roomIdToDelete = roomId as string;
+    const roomIdToDelete = String(roomId);
     const foundRoom = await Rooms.findById(roomIdToDelete);
     if (!foundRoom) throw new Error("Paid room not found");
 
-    await PaidRoom.deleteOne({ _id: foundRoom.paidRoom });
+    await PaidRoom.deleteMany({
+      $or: [
+        { _id: foundRoom.paidRoom },
+        { "tickets.roomId": foundRoom._id },
+        { roomId: foundRoom._id as any },
+      ],
+    });
 
     const updatedRooms = await Rooms.updateOne(
       { _id: roomIdToDelete },
       {
-        $pull: { paidRoom: roomIdToDelete },
+        $set: { paidRoom: null, paid: false },
       }
     );
 
@@ -152,24 +160,24 @@ export const deletePaidRoom = async (roomId: string) => {
 // reflect when a user ask for a refund
 export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   try {
-    const room_Id = paidRoom.roomId?.toString() as string;
+    const room_Id = paidRoom.tickets.roomId?.toString() as string;
     const user_Id = userId as string;
 
     const foundRoom = await PaidRoom.updateOne(
       {
-        roomId: room_Id,
+        "tickets.roomId": room_Id,
         _id: paidRoom._id,
       },
       {
         // reflect when a user ask for a refund
         tickets: {
           $inc: {
-            totalTicketsAvailable: 1,
-            totalSold: -1,
-          },
-          $pull: {
-            paidUsers: user_Id,
-            receiptId: paidRoom.receiptId,
+          "tickets.totalTicketsAvailable": 1,
+          "tickets.totalSold": -1,
+        },
+        $pull: {
+          "tickets.paidUsers": user_Id,
+          "tickets.receiptId": paidRoom.tickets.receiptId,
           },
           pricing: {
             $eq: {
@@ -209,26 +217,51 @@ export const returnPaidRoom = async (userId: string, paidRoom: IPaidRooms) => {
   }
 };
 
-export const addTickets = async (roomId: string, paidRoom: IPaidRooms) => {
+export const addTickets = async (roomId: string, payload: Partial<IPaidRooms>) => {
   try {
-    const room_Id = roomId as string;
-    const foundRoom = await Rooms.findById(room_Id);
+    const room_Id = String(roomId);
 
-    if (!foundRoom) throw new Error("Room not found");
+    const room = await Rooms.findById(room_Id).select("paidRoom");
+    if (!room) {
+      throw new Error("Room not found");
+    }
+    if (!room.paidRoom) {
+      throw new Error("Paid room not found");
+    }
 
-    const paid_Room = await PaidRoom.create({
-      roomId: room_Id,
-      tickets: {
-        ticketsTotal: paidRoom.tickets.ticketsTotal,
-        $addToSet: {
-          pricing: paidRoom.tickets.pricing,
+    const incomingPricing = (payload?.tickets?.pricing || []) as any[];
+    if (!Array.isArray(incomingPricing) || incomingPricing.length === 0) {
+      throw new Error("At least one pricing tier is required");
+    }
+
+    const newPricing = incomingPricing.map((tier: any) => ({
+      ...tier,
+      sold: tier.sold ?? 0,
+    }));
+
+    const ticketsToAdd = newPricing.reduce((sum: number, tier: any) => sum + tier.total, 0);
+
+    if (ticketsToAdd <= 0) {
+      throw new Error("ticketsTotal must be greater than 0");
+    }
+
+    const updatedPaidRoom = await PaidRoom.findByIdAndUpdate(
+      room.paidRoom,
+      {
+        $push: { "tickets.pricing": { $each: newPricing } },
+        $inc: {
+          "tickets.ticketsTotal": ticketsToAdd,
+          "tickets.totalTicketsAvailable": ticketsToAdd,
         },
       },
-    });
+      { new: true }
+    );
 
-    if (!paid_Room) throw new Error("Paid room not created");
+    if (!updatedPaidRoom) {
+      throw new Error("Paid room not updated");
+    }
 
-    return paid_Room;
+    return updatedPaidRoom;
   } catch (err) {
     Logging.error(err);
     throw err;
@@ -245,7 +278,7 @@ export const createNewPaidRoom = async (
     maxTickets: number;
     ticketTiers?: Array<{
       name: string;
-      price: number;  
+      price: number;
       quantity: number;
     }>;
     event_type?: string;
@@ -279,13 +312,17 @@ export const createNewPaidRoom = async (
       : now;
     const endDate = roomData.event_schedule?.endDate
       ? new Date(roomData.event_schedule.endDate)
-      : new Date(now.getTime() + 60 * 60 * 1000); 
+      : new Date(now.getTime() + 60 * 60 * 1000);
 
     const eventType = roomData.event_type || "Other";
-    const eventTypeOther = eventType === "Other" ? (roomData.event_typeOther || "Other") : undefined as any;
+    const eventTypeOther =
+      eventType === "Other"
+        ? roomData.event_typeOther || "Other"
+        : (undefined as any);
 
     const eventName = roomData.event_name || roomData.name || "Untitled Room";
-    const eventDescription = roomData.event_description || roomData.description || "Description";
+    const eventDescription =
+      roomData.event_description || roomData.description || "Description";
 
     const coords = roomData.event_location?.coordinates || [0, 0];
     const eventLocation = {
@@ -295,7 +332,8 @@ export const createNewPaidRoom = async (
     } as any;
 
     const eventAddress = {
-      street_address: roomData.event_location_address?.street_address || "123 Test St",
+      street_address:
+        roomData.event_location_address?.street_address || "123 Test St",
       address_line2: roomData.event_location_address?.address_line2 || "",
       city: roomData.event_location_address?.city || "Test City",
       state: roomData.event_location_address?.state || "CA",
@@ -331,35 +369,40 @@ export const createNewPaidRoom = async (
 
     const mapTierNameToEnum = (name: string): string => {
       const normalized = (name || "").toLowerCase();
-      if (normalized.includes("premium") && normalized.includes("vip")) return "Premium Vip";
-      if (normalized.includes("ultimate") && normalized.includes("vip")) return "Ultimate Vip";
+      if (normalized.includes("premium") && normalized.includes("vip"))
+        return "Premium Vip";
+      if (normalized.includes("ultimate") && normalized.includes("vip"))
+        return "Ultimate Vip";
       if (normalized.includes("early")) return "Early Bird";
       if (normalized.includes("last")) return "Last Minute";
       if (normalized.includes("vip")) return "Vip";
       return "General Admission";
     };
 
-    const pricing = (roomData.ticketTiers && roomData.ticketTiers.length > 0)
-      ? roomData.ticketTiers.map((t) => ({
-          tiers: mapTierNameToEnum(t.name),
-          title: t.name || "General Admission",
-          description: t.name || "General Admission",
-          price: t.price,
-          total: t.quantity,
-          available: t.quantity,
-          sold: 0,
-          active: true,
-        }))
-      : [{
-          tiers: "General Admission",
-          title: "General Admission",
-          description: "General Admission",
-          price: roomData.ticketPrice,
-          total: roomData.maxTickets,
-          available: roomData.maxTickets,
-          sold: 0,
-          active: true,
-        }];
+    const pricing =
+      roomData.ticketTiers && roomData.ticketTiers.length > 0
+        ? roomData.ticketTiers.map((t) => ({
+            tiers: mapTierNameToEnum(t.name),
+            title: t.name || "General Admission",
+            description: t.name || "General Admission",
+            price: t.price,
+            total: t.quantity,
+            available: t.quantity,
+            sold: 0,
+            active: true,
+          }))
+        : [
+            {
+              tiers: "General Admission",
+              title: "General Admission",
+              description: "General Admission",
+              price: roomData.ticketPrice,
+              total: roomData.maxTickets,
+              available: roomData.maxTickets,
+              sold: 0,
+              active: true,
+            },
+          ];
 
     const paidRoomData = {
       tickets: {

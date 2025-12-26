@@ -26,7 +26,6 @@ export interface IUsers extends Document {
   posts: mongoose.Types.ObjectId[];
   chats: mongoose.Types.ObjectId[];
   creator: mongoose.Types.ObjectId;
-  wallet: mongoose.Types.ObjectId;
 }
 
 export enum Miles {
@@ -46,6 +45,7 @@ export interface IUserProfile {
   location: Location;
   privacy: ProfilePrivacy;
   demographic: Demo;
+  bio: string;
   bookmarks: bookmarkType[];
 }
 
@@ -83,6 +83,7 @@ export interface CurrentLo {
   coordinates: [number, number];
   venue: string;
 }
+
 export enum Types {
   Point = "Point",
   Polygon = "Polygon",
@@ -94,11 +95,11 @@ export interface Demo {
   culture: Culture;
 }
 export enum GenderType {
-  Male,
-  Female,
-  Transgender,
-  NonBinary,
-  NoAnswer,
+  Male = "Male",
+  Female = "Female",
+  Transgender = "Transgender",
+  NonBinary = "NonBinary",
+  NoAnswer = "NoAnswer",
 }
 
 export enum Culture {

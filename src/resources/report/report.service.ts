@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 import { IReport } from "./report.interface";
-import { IMGNames, IRoomsDocument } from "../room/room.interface";
-import { IUserDocument } from "../user/user.interface";
 import Report from "./report.model";
 var toId = mongoose.Types.ObjectId;
 
@@ -74,6 +72,17 @@ export const createReport = async (
     if (!createdReport) throw new Error("Report not created");
 
     return createdReport;
+  } catch (err) {
+    throw err;
+  }
+};
+
+export const getAllReports = async (userId: string) => {
+  try {
+    const allReports = await Report.find({ userId: userId });
+    if (!allReports) throw new Error("Reports not found");
+
+    return allReports;
   } catch (err) {
     throw err;
   }

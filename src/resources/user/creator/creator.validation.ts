@@ -1,13 +1,13 @@
 import * as Joi from "joi";
-import { ICreatorRegistrationRequest, ICreatorSignupRequest } from "./creator.interface";
+import {
+  ICreatorRegistrationRequest,
+  ICreatorSignupRequest,
+} from "./creator.interface";
 
-export const creatorRegistration = Joi.object<ICreatorRegistrationRequest>().keys({
-  userId: Joi.string().required(),
-  signupCode: Joi.string().optional(),
-  portfolio: Joi.string().uri().optional(),
-  socialMedia: Joi.array().items(Joi.string().uri()).optional(),
-  experience: Joi.string().min(2).max(500).optional(),
-});
+export const creatorRegistration =
+  Joi.object<ICreatorRegistrationRequest>().keys({
+    userId: Joi.string().required(),
+  });
 
 export const creatorSignup = Joi.object<ICreatorSignupRequest>().keys({
   email: Joi.string().email().required(),
@@ -15,15 +15,12 @@ export const creatorSignup = Joi.object<ICreatorSignupRequest>().keys({
   firstName: Joi.string().min(2).max(50).required(),
   lastName: Joi.string().min(2).max(50).required(),
   state: Joi.string().min(2).max(50).required(),
-  signupCode: Joi.string().optional(),
-  portfolio: Joi.string().uri().optional(),
-  socialMedia: Joi.array().items(Joi.string().uri()).optional(),
-  experience: Joi.string().min(2).max(500).optional(),
+  signupCode: Joi.string().length(6).alphanum().required(),
 });
 
 export const stripeConnectOnboarding = Joi.object().keys({
-  returnUrl: Joi.string().uri().required(),
-  refreshUrl: Joi.string().uri().required(),
+  returnUrl: Joi.string().required(),
+  refreshUrl: Joi.string().required(),
 });
 
 export default {

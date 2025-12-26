@@ -1,7 +1,6 @@
 import mongoose, { model, Schema } from "mongoose";
 import { IPostDocument, IPostModel } from "./post.interface";
 import { Types } from "../user/user.interface";
-import Logging from "../../library/logging";
 
 // Only User can create post
 const PostSchema = new Schema<IPostDocument>(
@@ -88,6 +87,11 @@ const PostSchema = new Schema<IPostDocument>(
 );
 
 PostSchema.index({ postedLocation: "2dsphere" });
+PostSchema.index({ user_Id: 1 });
+PostSchema.index({ room_Id: 1 });
+PostSchema.index({ _id: 1, user_Id: 1 });
+PostSchema.index({ _id: 1, post_Id: 1 });
+PostSchema.index({ _id: 1, user_id: 1, post_Id: 1 });
 
 PostSchema.statics.findPostById = function (_id: string) {
   return this.findOne({ _id });

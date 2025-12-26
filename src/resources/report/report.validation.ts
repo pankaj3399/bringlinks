@@ -1,5 +1,4 @@
 import Joi from "joi";
-import { IMGNames } from "../room/room.interface";
 import { IReport } from "./report.interface";
 
 export const createReporting = Joi.object<Partial<IReport>>({

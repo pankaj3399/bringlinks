@@ -45,6 +45,8 @@ export const validateEnv = cleanEnv(process.env, {
   Saltrounds: num({ default: 11 }),
   BASE_URL: str(),
   AWS_BUCKET_ARN: str(),
+  AWS_BLU_POSTS_MEDIA: str(),
+  AWS_BLU_CHATS_MEDIA: str(),
   FRONTEND_URL: str(),
   // New auth/env vars
   ALLOWED_STATES: str({ default: "" }),

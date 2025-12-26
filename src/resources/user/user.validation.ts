@@ -34,13 +34,41 @@ const create = Joi.object<IUserDocument>().keys({
       .min(3)
       .required(),
   }),
-  signupCode: Joi.string().length(6).alphanum().optional(),
+  signupCode: Joi.string().length(6).alphanum().required(),
   state: Joi.string().trim().required(),
   profile: Joi.object<IUserProfile>().keys({
     firstName: Joi.string().min(3).max(30).required(),
     lastName: Joi.string().min(3).max(30).required(),
     birthDate: Joi.date().required(),
+    bio: Joi.string().min(3).max(500).optional(),
     occupation: Joi.string().min(3).max(30).required(),
+    demographic: Joi.object<Demo>().keys({
+      race: Joi.string()
+        .valid(
+          Race.asian,
+          Race.black,
+          Race.latino,
+          Race.nativeAmerican,
+          Race.pacificIslander,
+          Race.twoOrMore,
+          Race.white,
+          Race.noAnswer
+        )
+        .required(),
+      culture: Joi.string()
+        .valid(Culture.rural, Culture.suburan, Culture.urban, Culture.noAnswer)
+        .optional(),
+      age: Joi.number().min(7).max(120).optional(),
+      gender: Joi.string()
+        .valid(
+          GenderType.Male,
+          GenderType.Female,
+          GenderType.Transgender,
+          GenderType.NonBinary,
+          GenderType.NoAnswer
+        )
+        .required(),
+    }),
     location: Joi.object<Location>().keys({
       radiusPreference: Joi.number()
         .valid(
@@ -58,33 +86,6 @@ const create = Joi.object<IUserDocument>().keys({
       }),
     }),
     privacy: Joi.string().valid(ProfilePrivacy.private, ProfilePrivacy.public),
-    demographic: Joi.object<Demo>().keys({
-      race: Joi.string()
-        .valid(
-          Race.asian,
-          Race.black,
-          Race.latino,
-          Race.nativeAmerican,
-          Race.pacificIslander,
-          Race.twoOrMore,
-          Race.white,
-          Race.noAnswer
-        )
-        .required(),
-      culture: Joi.string()
-        .valid(Culture.rural, Culture.suburan, Culture.urban, Culture.noAnswer)
-        .optional(),
-      age: Joi.number().min(7).max(120).required(),
-      gender: Joi.string()
-        .valid(
-          GenderType.Male,
-          GenderType.Female,
-          GenderType.Transgender,
-          GenderType.NonBinary,
-          GenderType.NoAnswer
-        )
-        .required(),
-    }),
   }),
 });
 
@@ -126,20 +127,7 @@ const updateUser = Joi.object<IUserDocument>().keys({
   }),
   profile: Joi.object<IUserProfile>().keys({
     occupation: Joi.string().min(3).max(30),
-    location: Joi.object<Location>().keys({
-      radiusPreference: Joi.number()
-        .valid(
-          Miles.TEN,
-          Miles.THiRTY,
-          Miles.FIFTY,
-          Miles.SEVENTY_FIVE,
-          Miles.ONE_HUNDRED
-        )
-        .required(),
-      currentLocation: Joi.object<CurrentLo>().keys({
-        coordinates: Joi.array<number>().max(2).required(),
-      }),
-    }),
+    bio: Joi.string().min(3).max(30).optional(),
     demographic: Joi.object<Demo>().keys({
       race: Joi.string()
         .valid(
@@ -156,6 +144,20 @@ const updateUser = Joi.object<IUserDocument>().keys({
       culture: Joi.string()
         .valid(Culture.rural, Culture.suburan, Culture.urban, Culture.noAnswer)
         .optional(),
+    }),
+    location: Joi.object<Location>().keys({
+      radiusPreference: Joi.number()
+        .valid(
+          Miles.TEN,
+          Miles.THiRTY,
+          Miles.FIFTY,
+          Miles.SEVENTY_FIVE,
+          Miles.ONE_HUNDRED
+        )
+        .required(),
+      currentLocation: Joi.object<CurrentLo>().keys({
+        coordinates: Joi.array<number>().max(2).required(),
+      }),
     }),
     privacy: Joi.string().valid(ProfilePrivacy.private, ProfilePrivacy.public),
   }),

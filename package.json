@@ -6,18 +6,17 @@
   "scripts": {
     "start": "nodemon ./dist/server.js",
     "dev": "cross-env NODE_ENV=development tsc-watch --onSuccess \"nodemon ./dist/server.js\"",
+    "start-staging": "cross-env NODE_ENV=staging node ./dist/server.js",
     "start-prod": "cross-env NODE_ENV=production node ./dist/server.js",
     "build": "tsc && npx webpack --config webpack.config.js",
     "heroku-postbuild": "npm run build"
   },
   "dependencies": {
-    "@aws-sdk/client-lambda": "^3.890.0",
     "@aws-sdk/client-s3": "^3.335.0",
     "@aws-sdk/cloudfront-signer": "^3.398.0",
     "@aws-sdk/s3-request-presigner": "^3.342.0",
     "@sendgrid/mail": "^8.1.6",
     "@types/stripe": "^8.0.416",
-    "aws-cloudfront-sign": "^3.0.2",
     "axios": "^1.7.7",
     "bcrypt": "^5.1.0",
     "body-parser": "^1.20.1",

@@ -56,6 +56,7 @@ export const isUserAccount = async (
   try {
     const paramUserId = String(req.params.userId);
     const authUserId = String(req.user?._id);
+    Logging.log(`paramUserId: ${paramUserId} authUserId: ${authUserId}`);
     if (paramUserId !== authUserId)
       return res.status(403).send({ message: "Must have valid user id" });
     const user_Id = authUserId as string;

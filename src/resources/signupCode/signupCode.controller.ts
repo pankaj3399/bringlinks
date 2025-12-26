@@ -13,6 +13,7 @@ import validationMiddleware from "../../middleware/val.middleware";
 import validate from "./signupCode.validation";
 import { RequiredAuth, AuthorizeRole } from "../../middleware/auth.middleware";
 import { IRoles } from "../user/user.interface";
+import EmailService from "../../utils/email/email.service";
 import Logging from "../../library/logging";
 
 class SignupCodeController implements Controller {
@@ -28,6 +29,13 @@ class SignupCodeController implements Controller {
       `${this.path}/request`,
       validationMiddleware(validate.requestCode),
       this.requestSignupCode
+    );
+
+    this.router.post(
+      `${this.path}/request/send/:adminId`,
+      AuthorizeRole(IRoles.ADMIN),
+      validationMiddleware(validate.sendSignupCodeRequestEmail),
+      this.sendSignupCodeRequestEmail
     );
 
     this.router.post(
@@ -91,9 +99,6 @@ class SignupCodeController implements Controller {
       //   (req.user as any)?.profile?.name ||
       //   nameFromBody;
 
-      const { default: EmailService } = await import(
-        "../../utils/email/email.service"
-      );
       await EmailService.sendAdminSignupCodeRequest({
         name,
         email,
@@ -105,7 +110,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error sending signup code request: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -140,7 +145,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error generating signup code: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -166,7 +171,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error validating signup code: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -189,7 +194,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error fetching signup codes: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -207,7 +212,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error fetching all active signup codes: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -244,7 +249,7 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error updating signup code: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -279,7 +284,31 @@ class SignupCodeController implements Controller {
       });
     } catch (err: any) {
       Logging.error(`Error deactivating signup code: ${err.message}`);
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private sendSignupCodeRequestEmail = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { name, message, email, code, status } = req.body;
+
+      await EmailService.replyToSignupCodeRequestEmail({
+        name,
+        email,
+        status,
+        message,
+        code,
+      });
+
+      return res
+        .status(200)
+        .json({ message: "Signup code request email sent" });
+    } catch (err: any) {
+      Logging.error(`Error sending signup code request email: ${err.message}`);
+      return next(new HttpException(400, err.message));
     }
   };
 }

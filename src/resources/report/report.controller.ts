@@ -4,6 +4,7 @@ import HttpException from "../../middleware/exceptions/http.exception";
 import {
   createReport,
   deleteReport,
+  getAllReports,
   getReport,
   updateReport,
 } from "./report.service";
@@ -38,6 +39,11 @@ class ReportController implements Controller {
       ValidationMiddleware(createReporting),
       this.createReport
     );
+    this.router.get(
+      `${this.path}/all/:userId`,
+      RequiredAuth,
+      this.getAllReports
+    );
   }
 
   private getReport = async (
@@ -54,7 +60,7 @@ class ReportController implements Controller {
 
       res.status(200).send(foundReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -72,7 +78,7 @@ class ReportController implements Controller {
 
       res.status(201).send(updatedReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -90,7 +96,7 @@ class ReportController implements Controller {
 
       res.status(200).send(deletedReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -105,7 +111,25 @@ class ReportController implements Controller {
 
       return res.status(201).send(createdReport);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private getAllReports = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userId } = req.params;
+      if (!userId) return res.status(400).send("User Id is required");
+
+      const allReports = await getAllReports(userId);
+      if (!allReports) return res.status(400).send("Reports not found");
+
+      return res.status(200).send(allReports);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
     }
   };
 }

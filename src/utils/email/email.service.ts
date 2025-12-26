@@ -9,19 +9,25 @@ type AdminSignupCodeRequestPayload = {
 };
 
 class EmailService {
-  private static ensureConfigured(): void {
-    const apiKey = (validateEnv as any).SENDGRID_API_KEY as string | undefined;
-    if (!apiKey || apiKey.trim().length === 0) {
+  private apiKey: string;
+  private sgMail;
+
+  constructor() {
+    this.apiKey = (validateEnv as any).SENDGRID_API_KEY as string;
+    if (!this.apiKey || this.apiKey.trim().length === 0) {
       throw new Error("SendGrid is not configured. Missing SENDGRID_API_KEY");
     }
-    sgMail.setApiKey(apiKey);
+    try {
+      this.sgMail = sgMail;
+      this.sgMail.setApiKey(this.apiKey);
+    } catch (error: any) {
+      throw new Error("Failed to configure SendGrid: " + error.message);
+    }
   }
 
-  static async sendAdminSignupCodeRequest(
+  public async sendAdminSignupCodeRequest(
     payload: AdminSignupCodeRequestPayload
   ) {
-    this.ensureConfigured();
-
     const adminEmail = (validateEnv as any).ADMIN_NOTIFICATION_EMAIL as
       | string
       | undefined;
@@ -53,7 +59,7 @@ class EmailService {
     } as any;
 
     try {
-      await sgMail.send(msg);
+      await this.sgMail.send(msg);
       Logging.log("Admin signup code request email sent");
     } catch (error: any) {
       const response = error?.response;
@@ -68,8 +74,7 @@ class EmailService {
       );
     }
   }
-  static async sendPasswordRequestEmail(email: string, refreshToken: string) {
-    this.ensureConfigured();
+  public async sendPasswordRequestEmail(email: string, refreshToken: string) {
     let link: string;
     Logging.log(email);
     Logging.log(refreshToken);
@@ -113,8 +118,151 @@ class EmailService {
     } as any;
 
     try {
-      await sgMail.send(msg);
+      await this.sgMail.send(msg);
       Logging.log("Password request email sent");
+    } catch (error: any) {
+      const response = error?.response;
+      const body = response?.body;
+      Logging.error({
+        hint: "SendGrid send failed",
+        status: response?.statusCode,
+        body,
+      });
+      throw new Error(
+        body?.errors?.[0]?.message || error.message || "Failed to send email"
+      );
+    }
+  }
+
+  public async replyToSignupCodeRequestEmail({
+    name,
+    email,
+    status,
+    message,
+    code,
+  }: {
+    name: string;
+    email: string;
+    status: string;
+    message: string;
+    code: string;
+  }) {
+    const adminEmail = (validateEnv as any).ADMIN_NOTIFICATION_EMAIL as
+      | string
+      | undefined;
+
+    if (!adminEmail || adminEmail.trim().length === 0) {
+      throw new Error("Missing ADMIN_NOTIFICATION_EMAIL in environment");
+    }
+    const subject = "BLU Signup Code Request Reply";
+    const lines: string[] = [];
+
+    if (status === "approved") {
+      lines.push(
+        `Hello ${name}, We have received your request for a signup code.`
+      );
+      lines.push("");
+      lines.push(`We have ${status} the Email: ${email} for Entry`);
+      lines.push("");
+      lines.push(`Please use the following code to signup: ${code}`);
+      lines.push("");
+      lines.push("Reason:");
+      lines.push(message);
+    } else if (status === "rejected") {
+      lines.push(
+        `Hello ${name}, We have received your request for a signup code.`
+      );
+      lines.push("");
+      lines.push(
+        `We apologies for the inconvenience. We have ${status} the Email: ${email} for Entry`
+      );
+      lines.push("");
+      lines.push("Reason:");
+      lines.push(message);
+    }
+
+    const msg = {
+      to: email,
+      from: adminEmail,
+      subject,
+      text: lines.join("\n"),
+    } as any;
+    try {
+      await this.sgMail.send(msg);
+      Logging.log("Signup code request reply email sent");
+    } catch (error: any) {
+      const response = error?.response;
+      const body = response?.body;
+      Logging.error({
+        hint: "SendGrid send failed",
+        status: response?.statusCode,
+        body,
+      });
+      throw new Error(
+        body?.errors?.[0]?.message || error.message || "Failed to send email"
+      );
+    }
+  }
+
+  public async sendReceiptEmail(email: {
+    receiverEmail: string;
+    roomName: string;
+    roomType: string;
+    roomLocation: string;
+    roomDate: string;
+    roomTime: string;
+    roomPrice: number;
+    roomQuantity: number;
+    paymentIntentId: string;
+    totalAmount: number;
+    entryQRCode: string;
+  }) {
+    const {
+      paymentIntentId,
+      receiverEmail,
+      roomName,
+      roomType,
+      roomLocation,
+      roomDate,
+      roomTime,
+      roomPrice,
+      roomQuantity,
+      totalAmount,
+      entryQRCode,
+    } = email;
+
+    const emailFrom = (validateEnv as any).EMAIL_FROM as string;
+    const subject = "Receipt";
+
+    const lines: string[] = [];
+    lines.push(`Hello ${receiverEmail},`);
+    lines.push("");
+    lines.push(`Thank you for your purchase. Your receipt is attached below.`);
+    lines.push("");
+    lines.push(`Your Entry QR Code: ${entryQRCode}`);
+    lines.push(`Your Receipt: ${paymentIntentId}`);
+    lines.push("");
+    lines.push(`Room: ${roomName}`);
+    lines.push(`Room Type: ${roomType}`);
+    lines.push("");
+    lines.push(`Room Location: ${roomLocation}`);
+    lines.push(`Room Date: ${roomDate}`);
+    lines.push(`Room Time: ${roomTime}`);
+    lines.push("");
+    lines.push(`Room Price: ${roomPrice}`);
+    lines.push(`Room Quantity: ${roomQuantity}`);
+    lines.push("");
+    lines.push(`Total Amount: ${totalAmount}`);
+
+    const msg = {
+      to: receiverEmail,
+      from: emailFrom,
+      subject,
+      text: lines.join("\n"),
+    } as any;
+    try {
+      await this.sgMail.send(msg);
+      Logging.log("Receipt email sent");
     } catch (error: any) {
       const response = error?.response;
       const body = response?.body;
@@ -130,4 +278,4 @@ class EmailService {
   }
 }
 
-export default EmailService;
+export default new EmailService();

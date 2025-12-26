@@ -16,7 +16,7 @@ import {
   editMessage,
   deleteMessage,
 } from "./resources/chats/chats.service";
-import { ChatTypes, IChatsDocument } from "./resources/chats/chats.interface";
+import { ChatTypes } from "./resources/chats/chats.interface";
 import Chats from "./resources/chats/chats.model";
 import fileUpload from "express-fileupload";
 import session from "express-session";
@@ -37,8 +37,8 @@ class App {
     this.Http = http.createServer(this.express);
     this.io = new Server(this.Http, {
       cors: {
-        origin: validateEnv.BASE_URL || "*", // Replace with front-end URL
-        methods: ["GET", "POST"],
+        origin: validateEnv.BASE_URL, // Replace with front-end URL
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allowedHeaders: ["my-custom-header"],
         credentials: true,
       },
@@ -54,16 +54,64 @@ class App {
   private initializeMiddleware(): void {
     this.express.use(
       fileUpload({
-        limits: { fileSize: 50 * 1024 * 1024 },
-        useTempFiles: true,
-        tempFileDir: require("os").tmpdir(),
+        limits: { fileSize: 300 * 1024 * 1024 },
+        useTempFiles: false,
         abortOnLimit: true,
       })
+    );
+    // Stripe webhook needs raw body for signature verification
+    this.express.use(
+      "/stripe/webhook",
+      express.raw({ type: "application/json" })
     );
     this.express.use(express.json());
     this.express.use(express.urlencoded({ extended: true }));
     this.express.use(bodyParser.json());
-    this.express.use(cors());
+    this.express.use(
+      cors({
+        origin: (origin, callback) => {
+          const allowedOrigins = [
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8080",
+            "https://staging.bringinglinkups.com",
+            "https://www.bringinglinkups.com",
+            "https://bringinglinkups.com",
+            "https://www.admin.bringinglinkups.com",
+          ];
+
+          // Add BASE_URL from environment
+          if (
+            validateEnv.BASE_URL &&
+            !allowedOrigins.includes(validateEnv.BASE_URL)
+          ) {
+            allowedOrigins.push(validateEnv.BASE_URL);
+          }
+
+          // Allow requests with no origin (mobile apps, Postman, etc.)
+          if (!origin) {
+            Logging.info(`CORS origin is ${origin}`);
+            return callback(null, true);
+          }
+
+          // Check if origin is allowed
+          if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+          } else {
+            Logging.error(`❌ CORS blocked origin: ${origin}`);
+            callback(new Error("Not allowed by CORS"));
+          }
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allowedHeaders: [
+          "Content-Type",
+          "Authorization",
+          "X-Request-Time",
+          "my-custom-header",
+        ],
+        credentials: true,
+      })
+    );
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
     this.express.use(compression());
@@ -252,36 +300,40 @@ class App {
             newMessage,
             userId
           );
+          Logging.log(
+            `updatedMessage: ${updatedMessage} connectionCount: ${connectionCount}`
+          );
+          socket.emit("messageEdited", updatedMessage);
 
           if (updatedMessage) {
             if (
               updatedMessage.chatType === ChatTypes.user &&
               updatedMessage.receiver
             ) {
-              io.to(updatedMessage.receiver as unknown as string).emit(
-                "messageEdited",
-                updatedMessage
-              );
-              io.to(updatedMessage.sender as unknown as string).emit(
-                "messageEdited",
-                updatedMessage
+              const senderRoom = updatedMessage.sender.toString();
+              const receiverRoom = updatedMessage.receiver.toString();
+              io.to(senderRoom).emit("messageEdited", updatedMessage);
+              io.to(receiverRoom).emit("messageEdited", updatedMessage);
+
+              Logging.log(
+                `✅ Message edited emitted to rooms: ${senderRoom}, ${receiverRoom}`
               );
             } else if (
               updatedMessage.chatType === ChatTypes.group &&
               updatedMessage.group
             ) {
-              io.to(updatedMessage.group as unknown as string).emit(
-                "messageEdited",
-                updatedMessage
+              const groupRoom = updatedMessage.group.toString();
+              io.to(groupRoom).emit("messageEdited", updatedMessage);
+              Logging.log(
+                `✅ Message edited emitted to group room: ${groupRoom}`
               );
             } else if (
               updatedMessage.chatType === ChatTypes.room &&
               updatedMessage.room_Id
             ) {
-              io.to(updatedMessage.room_Id as unknown as string).emit(
-                "messageEdited",
-                updatedMessage
-              );
+              const roomId = updatedMessage.room_Id.toString();
+              io.to(roomId).emit("messageEdited", updatedMessage);
+              Logging.log(`✅ Message edited emitted to room: ${roomId}`);
             }
           }
         } catch (error) {
@@ -292,35 +344,77 @@ class App {
       socket.on("deleteMessage", async ({ messageId, userId }) => {
         try {
           const success = await deleteMessage(messageId, userId);
+          Logging.log(`success: ${success}`);
 
           if (success) {
             const message = await Chats.findById(messageId);
+            Logging.log(
+              `message in deleteMessage: ${message} connectionCount: ${connectionCount}`
+            );
+            socket.emit("messageDeleted", { messageId });
             if (message) {
               if (message.chatType === ChatTypes.user && message.receiver) {
+                Logging.log(
+                  `message.receiver in deleteMessage: ${message.receiver}`
+                );
+                Logging.log(
+                  `message.sender in deleteMessage: ${message.sender.toString()}`
+                );
                 io.to(message.receiver as unknown as string).emit(
                   "messageDeleted",
                   { messageId }
                 );
+                Logging.log(`messageId in deleteMessage: ${messageId}`);
                 io.to(message.sender as unknown as string).emit(
                   "messageDeleted",
                   { messageId }
+                );
+                const senderRoom = message.sender.toString();
+                const receiverRoom = message.receiver.toString();
+
+                Logging.log(
+                  `Emitting delete to rooms: ${senderRoom}, ${receiverRoom}`
+                );
+                io.to(senderRoom).emit("messageDeleted", {
+                  messageId,
+                  sender: message.sender,
+                  receiver: message.receiver,
+                  chatType: message.chatType,
+                });
+                io.to(receiverRoom).emit("messageDeleted", {
+                  messageId,
+                  sender: message.sender,
+                  receiver: message.receiver,
+                  chatType: message.chatType,
+                });
+
+                Logging.log(
+                  `✅ Message deleted emitted to rooms: ${senderRoom}, ${receiverRoom}`
                 );
               } else if (
                 message.chatType === ChatTypes.group &&
                 message.group
               ) {
-                io.to(message.group as unknown as string).emit(
-                  "messageDeleted",
-                  { messageId }
+                const groupRoom = message.group.toString();
+                io.to(groupRoom).emit("messageDeleted", {
+                  messageId,
+                  group: message.group,
+                  chatType: message.chatType,
+                });
+                Logging.log(
+                  `✅ Message deleted emitted to group room: ${groupRoom}`
                 );
               } else if (
                 message.chatType === ChatTypes.room &&
                 message.room_Id
               ) {
-                io.to(message.room_Id as unknown as string).emit(
-                  "messageDeleted",
-                  { messageId }
-                );
+                const roomId = message.room_Id.toString();
+                io.to(roomId).emit("messageDeleted", {
+                  messageId,
+                  room_Id: message.room_Id,
+                  chatType: message.chatType,
+                });
+                Logging.log(`✅ Message deleted emitted to room: ${roomId}`);
               }
             }
           }
@@ -348,12 +442,22 @@ class App {
   private initializeDatabaseConnection(): void {
     const { Mongo_User, Mongo_Pass, Mongo_Path } = validateEnv;
     mongoose.set("strictQuery", false);
-    mongoose.connect(`mongodb+srv://${Mongo_User}${Mongo_Pass}${Mongo_Path}`);
+    mongoose
+      .connect(`mongodb+srv://${Mongo_User}${Mongo_Pass}${Mongo_Path}`, {
+        maxPoolSize: 5,
+        minPoolSize: 1,
+      })
+      .then(() => {
+        Logging.info("Successfully Connected to Database");
+      })
+      .catch((err) => {
+        Logging.error(`Initial connection failed:, ${err}`);
+        process.exit(1);
+      });
 
     mongoose.connection.on("connected", () => {
-      Logging.info(
-        `Successful connection to Database: ${Mongo_Path.split("&")[2]}`
-      );
+      const appName = Mongo_Path.split("&")[2].split("=")[1];
+      Logging.info(`Connection to ${appName} Database`);
     });
     mongoose.connection.on("error", (err) => {
       Logging.error(err);
@@ -364,9 +468,14 @@ class App {
     this.express.use(ErrorMiddleware);
   }
   public listen() {
-    this.Http.listen(this.port, () => {
-      Logging.info(`App is up and running on this port: ${this.port}`);
-    });
+    try {
+      this.Http.listen(this.port, () => {
+        Logging.info(`App is up and running on this port: ${this.port}`);
+      });
+    } catch (err) {
+      Logging.log(`Listening Error: ${err}`);
+      process.exit(1);
+    }
   }
 }
 

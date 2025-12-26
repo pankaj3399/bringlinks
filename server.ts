@@ -5,7 +5,6 @@ import roomController from "./src/resources/room/room.controller";
 import postController from "./src/resources/post/post.controller";
 import ChatController from "./src/resources/chats/chats.controller";
 import AuthController from "./src/resources/auth/auth.controller";
-import WalletController from "./src/resources/wallet/wallet.controller";
 import ReportController from "./src/resources/report/report.controller";
 import SignupCodeController from "./src/resources/signupCode/signupCode.controller";
 import CreatorController from "./src/resources/user/creator/creator.controller";
@@ -25,7 +24,6 @@ const app = new App(
     new postController(),
     new ChatController(),
     new AuthController(),
-    new WalletController(),
     new ReportController(),
     new SignupCodeController(),
   ],

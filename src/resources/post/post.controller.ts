@@ -1,15 +1,25 @@
-import { Router, Request, Response, NextFunction } from "express";
+import e, { Router, Request, Response, NextFunction } from "express";
 import Logging from "../../library/logging";
 import HttpException from "../../middleware/exceptions/http.exception";
 import Controller from "utils/interfaces/controller.interface";
 import {
   comment,
+  commentReply,
   createAPost,
   deleteAPost,
   deleteComment,
   editComment,
   getAPostById,
+  getCommentsPaginated,
+  getCommentsReplyPaginated,
+  getCommentsWithImages,
+  getLikes,
+  getNearbyPostsPaginated,
   getNearPost,
+  getNearRoomPost,
+  getRoomPost,
+  getRoomPostPaginated,
+  getUserPost,
   getUserPosts,
   likeAPost,
   unLikeAPost,
@@ -36,10 +46,16 @@ import {
   postPermissions,
 } from "../../middleware/authorization.middleware";
 import {
+  listCheckImageUrl,
   getMediaTypeFromMimeType,
   uploadMediaFile,
   validateMediaFile,
+  listCheckImgUrlWithUser,
 } from "../../utils/ImageServices/postImages";
+import { listCheckRoomImgUrl } from "../../utils/ImageServices/roomFlyer.Img";
+import { get } from "config";
+import { IComments } from "../comments/comments.interface";
+import { IPostDocument } from "./post.interface";
 
 class PostController implements Controller {
   public path = "/posts";
@@ -99,11 +115,32 @@ class PostController implements Controller {
       likePermissions,
       this.unLikeAPost
     );
+    this.router.get(
+      `${this.path}/likes/:userid/:postid`,
+      RequiredAuth,
+      this.getUserLikes
+    );
+    this.router.get(
+      `${this.path}/comments/paginated/:userid/:postid`,
+      RequiredAuth,
+      this.getCommentsPaginated
+    );
+    this.router.get(
+      `${this.path}/comments/paginated/:userid/:postid/:commentid/reply`,
+      RequiredAuth,
+      this.getCommentsReplyPaginated
+    );
     this.router.post(
       `${this.path}/comment/:userid/:postid`,
-      //RequiredAuth,
+      RequiredAuth,
       validationMiddleware(commentValidate.createComment),
       this.comment
+    );
+    this.router.post(
+      `${this.path}/comment/:userid/:postid/:commentid/reply`,
+      RequiredAuth,
+      validationMiddleware(commentValidate.createComment),
+      this.commentReply
     );
     this.router.patch(
       `${this.path}/editcomment/:userid/:postid/:commentid`,
@@ -122,6 +159,36 @@ class PostController implements Controller {
       `${this.path}/upload-image/:userid/:postid`,
       RequiredAuth,
       this.uploadPostMedia
+    );
+    this.router.get(
+      `${this.path}/user/all/:userid`,
+      RequiredAuth,
+      this.getUserPost
+    );
+    this.router.get(
+      `${this.path}/images/user/:userid`,
+      RequiredAuth,
+      this.retrieveUserPostMedia
+    );
+    this.router.get(
+      `${this.path}/images/retrieve/:userid`,
+      RequiredAuth,
+      this.retrieveNearbyPostMedia
+    );
+    this.router.get(
+      `${this.path}/images/room/:roomid/:userid`,
+      RequiredAuth,
+      this.retrieveRoomPostMedia
+    );
+    this.router.get(
+      `${this.path}/images/retrieve/room/:userid`,
+      RequiredAuth,
+      this.retrieveNearbyRoomPostMedia
+    );
+    this.router.get(
+      `${this.path}/media/retrieve/room/:userid/:roomid`,
+      RequiredAuth,
+      this.retrieveOneRoomPostMedia
     );
   }
   private getNearPost = async (
@@ -170,7 +237,7 @@ class PostController implements Controller {
       res.status(200).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(400, err.message));
     }
   };
   private addPostViewStats = async (
@@ -190,10 +257,28 @@ class PostController implements Controller {
       res.status(200).json(updatedPost);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(400, err.message));
     }
   };
+  private getUserPost = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid } = req.params;
+      if (!userid) return res.status(400).json({ message: "Id is required" });
+      Logging.log(`getUserPost: ${userid}`);
+      const foundPost = await getUserPost(userid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
 
+      res.status(200).json(foundPost);
+    } catch (err: any) {
+      Logging.error(err);
+      return next(new HttpException(400, err.message));
+    }
+  };
   private createAPost = async (
     req: Request,
     res: Response,
@@ -202,9 +287,15 @@ class PostController implements Controller {
     try {
       const { userid } = req.params;
       if (!userid) return res.status(400).json({ message: "Id is required" });
+      const { roomId } = req.query;
+
       // ensure user_Id is set on body for schema validation
       (req.body as any).user_Id = userid;
-      const foundPost = await createAPost(req.body, userid);
+      const foundPost = await createAPost(
+        req.body,
+        userid,
+        roomId as string | undefined
+      );
 
       if (!foundPost)
         return res.status(400).json({ message: "Post not created" });
@@ -212,7 +303,7 @@ class PostController implements Controller {
       res.status(201).json(foundPost);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(400, err.message));
     }
   };
   private uploadPostMedia = async (
@@ -247,9 +338,9 @@ class PostController implements Controller {
 
       await updatePostMedia(foundPost._id, signedUrl, fileName);
 
-      res.status(200).json();
+      res.status(200).json({ signedUrl, fileName });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -336,7 +427,7 @@ class PostController implements Controller {
       res.status(200).json(updatedPost);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(500, err));
     }
   };
   private unLikeAPost = async (
@@ -355,7 +446,98 @@ class PostController implements Controller {
       res.status(200).json(unlikedUser);
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(500, err));
+    }
+  };
+  private commentReply = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid, commentid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+      //check post exist
+      const foundPost = await getAPostById(postid, userid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
+
+      if (!commentid)
+        return res.status(400).json({ message: "Comment id is required" });
+      const comments = await commentReply(userid, commentid, req.body, postid);
+      if (!comments)
+        return res.status(400).json({ message: "Comment not created" });
+
+      res.status(200).json(comments);
+    } catch (err: any) {
+      Logging.error(err);
+      return next(new HttpException(500, err.message));
+    }
+  };
+  private getCommentsReplyPaginated = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid, commentid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const page = Number(req.query.page);
+      const perPage = Number(req.query.perPage);
+
+      if (!perPage)
+        return res.status(400).json({ message: "Per page is required" });
+      if (!page) return res.status(400).json({ message: "Page is required" });
+
+      const comments = await getCommentsReplyPaginated(
+        postid,
+        commentid,
+        page,
+        perPage
+      );
+
+      if (!comments)
+        return res.status(400).json({ message: "Comment not found" });
+
+      res.status(200).json(comments);
+    } catch (err: any) {
+      Logging.error(err);
+      return next(new HttpException(500, err));
+    }
+  };
+  private getCommentsPaginated = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const page = Number(req.query.page);
+      const perPage = Number(req.query.perPage);
+
+      if (!perPage)
+        return res.status(400).json({ message: "Per page is required" });
+      if (!page) return res.status(400).json({ message: "Page is required" });
+
+      const comments = await getCommentsPaginated(postid, page, perPage);
+
+      if (!comments)
+        return res.status(400).json({ message: "Comment not found" });
+
+      //given comments get all the comments user images
+      const commentsWithImages = await getCommentsWithImages(
+        comments as IPostDocument[]
+      );
+      res.status(200).json(commentsWithImages);
+    } catch (err: any) {
+      Logging.error(err);
+      return next(new HttpException(400, err));
     }
   };
   private comment = async (
@@ -368,14 +550,29 @@ class PostController implements Controller {
       if (!postid || !userid)
         return res.status(400).json({ message: "Id is required" });
 
-      const comments = await comment(userid, postid, req.body);
-      if (!comments)
-        return res.status(400).json({ message: "Comment not created" });
+      const { roomId } = req.query;
 
-      res.status(200).json(comments);
+      if (roomId) {
+        const comments = await comment(
+          userid,
+          postid,
+          req.body,
+          roomId as string
+        );
+
+        if (!comments)
+          return res.status(400).json({ message: "Comment not created" });
+
+        res.status(200).json(comments);
+      } else {
+        const comments = await comment(userid, postid, req.body);
+        if (!comments)
+          return res.status(400).json({ message: "Comment not created" });
+        res.status(200).json(comments);
+      }
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err.message);
+      return next(new HttpException(400, err.message));
     }
   };
   private deleteAComment = async (
@@ -396,7 +593,7 @@ class PostController implements Controller {
       res.status(200).send({ message: "Comment deleted" });
     } catch (err: any) {
       Logging.error(err);
-      new HttpException(500, err);
+      return next(new HttpException(400, err.message));
     }
   };
   private editAComment = async (
@@ -417,10 +614,28 @@ class PostController implements Controller {
       res.status(200).json(req.body);
     } catch (err: any) {
       Logging.error(err);
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private getUserLikes = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, postid } = req.params;
+      if (!postid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const likes = await getLikes(postid, userid);
+
+      if (!likes) return res.status(204).json({ message: "Likes not found" });
+      res.status(200).json(likes);
+    } catch (err: any) {
+      Logging.error(err);
       new HttpException(500, err);
     }
   };
-
   private getPostShareLinks = async (
     req: Request,
     res: Response,
@@ -436,7 +651,6 @@ class PostController implements Controller {
       if (!postId.match(/^[0-9a-fA-F]{24}$/)) {
         return res.status(400).json({ message: "Invalid post ID format" });
       }
-
       const shareLinks = await generatePostShareLinks(
         postId,
         shareType as PostShareType,
@@ -450,7 +664,7 @@ class PostController implements Controller {
         shareLinks,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -492,7 +706,7 @@ class PostController implements Controller {
         platform: result.platform,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -519,7 +733,7 @@ class PostController implements Controller {
         analytics,
       });
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -554,7 +768,131 @@ class PostController implements Controller {
 
       res.redirect(originalUrl);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private retrieveNearbyRoomPostMedia = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid } = req.params;
+      const { lng, ltd } = req.query;
+
+      if (!userid) return res.status(400).json({ message: "Id is required" });
+
+      const nearbyPosts = await getNearRoomPost(
+        userid,
+        Number(lng),
+        Number(ltd)
+      );
+      if (!nearbyPosts)
+        return res.status(204).json({ message: "Post not found" });
+
+      const nearbyPostsMedia = await listCheckImageUrl(nearbyPosts);
+
+      return res.status(200).json(nearbyPostsMedia);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private retrieveNearbyPostMedia = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid } = req.params;
+      const { lng, ltd, page, perPage } = req.query;
+      if (!lng || !ltd)
+        return res.status(400).json({ message: "Location is needed" });
+
+      if (!userid) return res.status(400).json({ message: "Id is required" });
+
+      const nearbyPosts = await getNearbyPostsPaginated(
+        userid,
+        Number(lng),
+        Number(ltd),
+        Number(page),
+        Number(perPage)
+      );
+
+      Logging.log(nearbyPosts);
+      const nearbyPostsMedia = await listCheckImgUrlWithUser(nearbyPosts);
+
+      return res.status(200).send(nearbyPostsMedia);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private retrieveUserPostMedia = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid } = req.params;
+      if (!userid) return res.status(400).json({ message: "Id is required" });
+
+      //get users posts
+      const foundPost = await getUserPost(userid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
+
+      const foundPostMedia = await listCheckImageUrl(foundPost);
+
+      return res.status(200).send(foundPostMedia);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private retrieveRoomPostMedia = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomid, userid } = req.params;
+      if (!roomid || !userid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const foundPost = await getRoomPost(roomid);
+      if (!foundPost)
+        return res.status(400).json({ message: "Post not found" });
+
+      const foundPostMedia = await listCheckImageUrl(foundPost);
+
+      return res.status(200).send(foundPostMedia);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+  private retrieveOneRoomPostMedia = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { userid, roomid } = req.params;
+      if (!userid || !roomid)
+        return res.status(400).json({ message: "Id is required" });
+
+      const page = Number(req.query.page);
+      const perPage = Number(req.query.perPage);
+
+      if (!perPage)
+        return res.status(400).json({ message: "Per page is required" });
+      if (!page) return res.status(400).json({ message: "Page is required" });
+
+      const foundPost = await getRoomPostPaginated(roomid, page, perPage);
+      if (!foundPost) return res.status(204).json({ message: "No Post Found" });
+
+      const foundPostMedia = await listCheckRoomImgUrl(foundPost);
+
+      return res.status(200).send(foundPostMedia);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
     }
   };
 }

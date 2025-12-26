@@ -1,7 +1,11 @@
 import { Router, Request, Response, NextFunction } from "express";
 import Controller from "../../../utils/interfaces/controller.interface";
 import HttpException from "../../../middleware/exceptions/http.exception";
-import { addFriend, findFriend as getFriends, removeFriend as unFriend } from "./friends.service";
+import {
+  addFriend,
+  findFriend as getFriends,
+  removeFriend as unFriend,
+} from "./friends.service";
 import ValidationMiddleware from "middleware/val.middleware";
 import { createFriend } from "./friends.validation";
 
@@ -43,7 +47,7 @@ class FriendsController implements Controller {
 
       res.status(201).send(addedFriend);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -61,7 +65,7 @@ class FriendsController implements Controller {
 
       res.status(200).send(removedFriend);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 
@@ -79,7 +83,7 @@ class FriendsController implements Controller {
 
       res.status(200).send(foundedFriends);
     } catch (err: any) {
-      next(new HttpException(400, err.message));
+      return next(new HttpException(400, err.message));
     }
   };
 }
