@@ -9,17 +9,17 @@ type AdminSignupCodeRequestPayload = {
 };
 
 class EmailService {
-  // private apiKey: string;
+  private apiKey: string;
   private sgMail;
 
   constructor() {
-    // this.apiKey = (validateEnv as any).SENDGRID_API_KEY as string;
-    // if (!this.apiKey || this.apiKey.trim().length === 0) {
-      // throw new Error("SendGrid is not configured. Missing SENDGRID_API_KEY");
-    // }
+    this.apiKey = (validateEnv as any).SENDGRID_API_KEY as string;
+    if (!this.apiKey || this.apiKey.trim().length === 0) {
+      throw new Error("SendGrid is not configured. Missing SENDGRID_API_KEY");
+    }
     try {
       this.sgMail = sgMail;
-      // this.sgMail.setApiKey(this.apiKey);
+      this.sgMail.setApiKey(this.apiKey);
     } catch (error: any) {
       throw new Error("Failed to configure SendGrid: " + error.message);
     }

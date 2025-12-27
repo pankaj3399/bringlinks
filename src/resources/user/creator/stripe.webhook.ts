@@ -11,6 +11,8 @@ import { createEntryQRCode } from "../../room/room.service";
 import Receipts from "../../room/receipts/receipts.model";
 import { PaymentStatus } from "../../room/receipts/receipts.interface";
 import mongoose from "mongoose";
+import emailService from "../../../utils/email/email.service";
+import StripeService from "../../../utils/stripe/stripe.service";
 
 const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
 if (!stripeApiKey) {
@@ -300,6 +302,62 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
       const createdReceipt = await Receipts.create(receiptData);
       Logging.log(`Receipt created successfully in 'receipts' collection. Receipt ID: ${createdReceipt._id}, User: ${userId}, Room: ${roomId}`);
+      
+      // Add user to the Room's entered_id array
+      try {
+        const updatedRoom = await Rooms.findByIdAndUpdate(
+          roomId,
+          { $addToSet: { entered_id: new mongoose.Types.ObjectId(userId) } },
+          { new: true }
+        );
+        
+        if (updatedRoom) {
+          // Send receipt email
+          try {
+            await emailService.sendReceiptEmail({
+              paymentIntentId: paymentIntentId,
+              receiverEmail: fullSession.customer_email || fullSession.customer_details?.email || "",
+              roomName: updatedRoom.event_name || "",
+              roomType: updatedRoom.event_type
+                ? updatedRoom.event_type
+                : (updatedRoom.event_typeOther as string) || "",
+              roomLocation: `${
+                updatedRoom.event_location_address?.street_address || ""
+              }${
+                updatedRoom.event_location_address?.address_line2
+                  ? `, ${updatedRoom.event_location_address.address_line2}`
+                  : ""
+              }${updatedRoom.event_location_address?.city ? `, ${updatedRoom.event_location_address.city}` : ""}${
+                updatedRoom.event_location_address?.state
+                  ? `, ${updatedRoom.event_location_address.state}`
+                  : ""
+              }${updatedRoom.event_location_address?.zipcode ? `, ${updatedRoom.event_location_address.zipcode}` : ""}${
+                updatedRoom.event_location_address?.country
+                  ? `, ${updatedRoom.event_location_address.country}`
+                  : ""
+              }`,
+              roomDate: updatedRoom.event_schedule?.startDate
+                ? updatedRoom.event_schedule.startDate.toISOString()
+                : "",
+              roomTime: updatedRoom.event_schedule?.startDate
+                ? updatedRoom.event_schedule.startDate.toISOString()
+                : "",
+              roomPrice: target?.price || 0,
+              roomQuantity: quantity,
+              totalAmount: totalAmount,
+              entryQRCode: entryQRCode,
+            });
+            
+            Logging.log(`Receipt email sent to ${fullSession.customer_email || fullSession.customer_details?.email}`);
+          } catch (emailError: any) {
+            Logging.error(`Receipt email error: ${emailError.message}`);
+          }
+        } else {
+          Logging.error(`Room not found for roomId: ${roomId}`);
+        }
+      } catch (roomUpdateError: any) {
+        Logging.error(`Room update error: ${roomUpdateError.message}`);
+      }
       
     } catch (receiptError: any) {
       Logging.error(`Receipt creation error: ${receiptError.message}`);
