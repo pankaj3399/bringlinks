@@ -1,4 +1,4 @@
-import express, { Application } from "express";
+import express, { Application, RequestHandler } from "express";
 import http, { IncomingMessage, ServerResponse } from "http";
 import { Server, Socket } from "socket.io";
 import mongoose from "mongoose";
@@ -52,6 +52,20 @@ class App {
     this.initializeErrorHandling();
   }
   private initializeMiddleware(): void {
+
+    this.express.use(
+      "/stripe/webhook",
+      bodyParser.raw({ 
+        type: "application/json",
+        verify: (req: any, res, buf, encoding) => {
+          req.rawBody = buf;
+        }
+      }),
+      stripeWebhook
+    );
+    
+    // Now apply all other middleware normally
+    this.express.use(compression());
     this.express.use(
       fileUpload({
         limits: { fileSize: 300 * 1024 * 1024 },
@@ -114,7 +128,6 @@ class App {
     );
     this.express.use(cookieParser());
     this.express.use(morgan("dev"));
-    this.express.use(compression());
     this.express.use(
       session({
         secret: env.COOKIE,
@@ -433,8 +446,6 @@ class App {
     Logging.log(`Socket is ready`);
   }
   private initializeControllers(controllers: Controller[]): void {
-    this.express.use("/", stripeWebhook);
-
     controllers.forEach((controller: Controller) => {
       this.express.use(controller.router);
     });

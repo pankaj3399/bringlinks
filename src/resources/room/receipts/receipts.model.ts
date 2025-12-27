@@ -42,9 +42,28 @@ const ReceiptsSchema = new Schema<IReceipts>(
       type: Number,
       required: true,
     },
+    subtotal: {
+      type: Number,
+      required: true,
+    },
+    taxAmount: {
+      type: Number,
+      required: true,
+    },
     totalAmount: {
       type: Number,
       required: true,
+    },
+    taxBreakdown: {
+      type: [
+        {
+          amount: Number,
+          rate: Number,
+          jurisdiction: String,
+          taxabilityReason: String,
+        },
+      ],
+      required: false,
     },
     entryQRCode: {
       type: String,
