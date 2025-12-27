@@ -454,7 +454,7 @@ class App {
     const { Mongo_User, Mongo_Pass, Mongo_Path } = validateEnv;
     mongoose.set("strictQuery", false);
     mongoose
-      .connect(`mongodb+srv://${Mongo_User}:${Mongo_Pass}@${Mongo_Path}/bringlinks`, {
+      .connect(`mongodb+srv://${Mongo_User}${Mongo_Pass}${Mongo_Path}/bringlinks`, {
         maxPoolSize: 5,
         minPoolSize: 1,
       })
@@ -467,8 +467,9 @@ class App {
       });
 
     mongoose.connection.on("connected", () => {
-      const appName = Mongo_Path;
-      Logging.info(`Connection to ${appName} Database`);
+      Logging.info("Successfully Connected to Database");
+      // const appName = Mongo_Path.split("&")[2].split("=")[1];
+      // Logging.info(`Connection to ${appName} Database`);
     });
     mongoose.connection.on("error", (err) => {
       Logging.error(err);

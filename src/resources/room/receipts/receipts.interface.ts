@@ -10,7 +10,15 @@ export interface IReceipts extends Document {
   tierType: string;
   quantity: number;
   unitPrice: number;
+  subtotal: number;
+  taxAmount: number;
   totalAmount: number;
+  taxBreakdown?: Array<{
+    amount: number;
+    rate: number;
+    jurisdiction: string;
+    taxabilityReason: string;
+  }>;
   entryQRCode: string;
   ticketId: string;
   status: PaymentStatus;

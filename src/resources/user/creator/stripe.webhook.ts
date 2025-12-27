@@ -27,7 +27,6 @@ router.post("/", async (req: Request, res: Response) => {
   const sig = req.headers["stripe-signature"] as string;
   const endpointSecret = validateEnv.STRIPE_WEBHOOK_SECRET;
 
-  Logging.log(`STRIPE_WEBHOOK_SECRET: ${endpointSecret}`);
   if (!endpointSecret) {
     Logging.error("STRIPE_WEBHOOK_SECRET is not set");
     return res.status(500).json({ error: "Webhook secret not configured" });
@@ -198,7 +197,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     await paidRoom.save();
 
-    // Generate ticket ID and QR code
     let ticketId = `ticket_${session.id}_${Date.now()}`;
     let entryQRCode = "";
 
@@ -209,7 +207,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       Logging.error(`Entry QR code generation error: ${qrError.message}`);
     }
 
-    // Create receipt after checkout completed (separate try-catch for better error handling)
     try {
       const paymentIntentId = typeof fullSession.payment_intent === "string" 
         ? fullSession.payment_intent 
@@ -218,6 +215,68 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       if (!paymentIntentId) {
         Logging.error(`Payment intent ID not found for session ${session.id}`);
         return;
+      }
+
+      const subtotal = (fullSession.amount_subtotal || 0) / 100;
+      const totalAmount = (fullSession.amount_total || 0) / 100;
+      const taxAmount = Math.max(0, totalAmount - subtotal);
+
+      const breakdown = (fullSession.total_details?.breakdown as any);
+      let taxBreakdown: any[] = [];
+      
+      if (breakdown?.taxes && Array.isArray(breakdown.taxes) && breakdown.taxes.length > 0) {
+        taxBreakdown = breakdown.taxes
+          .map((tax: any) => {
+            let taxRate = 0;
+            if (tax.rate !== null && tax.rate !== undefined) {
+              if (typeof tax.rate === 'object' && tax.rate !== null) {
+                const percentage = tax.rate.effective_percentage ?? tax.rate.percentage;
+                if (percentage !== null && percentage !== undefined && !isNaN(percentage)) {
+                  taxRate = percentage / 100;
+                }
+              } else if (typeof tax.rate === 'number') {
+                if (!isNaN(tax.rate)) {
+                  taxRate = tax.rate / 10000;
+                }
+              } else {
+                const rateValue = parseFloat(tax.rate);
+                if (!isNaN(rateValue)) {
+                  taxRate = rateValue / 10000;
+                }
+              }
+            }
+            
+            let taxAmountValue = 0;
+            if (tax.amount !== null && tax.amount !== undefined) {
+              const amountValue = typeof tax.amount === 'number' ? tax.amount : parseFloat(tax.amount);
+              if (!isNaN(amountValue)) {
+                taxAmountValue = amountValue / 100;
+              }
+            }
+            
+            let jurisdiction = "Unknown";
+            if (tax.rate && typeof tax.rate === 'object' && tax.rate.jurisdiction) {
+              jurisdiction = tax.rate.jurisdiction;
+            } else if (tax.rate && typeof tax.rate === 'object' && tax.rate.country) {
+              jurisdiction = tax.rate.country;
+            } else if (tax.jurisdiction) {
+              jurisdiction = typeof tax.jurisdiction === 'string' ? tax.jurisdiction : tax.jurisdiction.country || "Unknown";
+            }
+            
+            return {
+              amount: taxAmountValue,
+              rate: taxRate,
+              jurisdiction: jurisdiction,
+              taxabilityReason: tax.taxability_reason || "not_taxable",
+            };
+          })
+          .filter((tax: any) => tax.amount > 0 || tax.rate > 0);
+      } else {
+        if (taxAmount > 0) {
+          Logging.error(`Tax amount exists (${taxAmount}) but tax breakdown is empty. Full breakdown: ${JSON.stringify(breakdown)}`);
+        } else {
+          Logging.error(`No tax amount calculated. Subtotal: ${subtotal}, Total: ${totalAmount}`);
+        }
       }
 
       const receiptData = {
@@ -230,25 +289,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         tierType: target?.tiers || "",
         quantity: quantity,
         unitPrice: target?.price || 0,
-        totalAmount: (fullSession.amount_total || 0) / 100,
+        subtotal: subtotal,
+        taxAmount: taxAmount,
+        totalAmount: totalAmount,
+        taxBreakdown: taxBreakdown.length > 0 ? taxBreakdown : undefined,
         entryQRCode: entryQRCode,
         ticketId: ticketId,
         status: PaymentStatus.COMPLETED,
       };
-
-      Logging.log(`Creating receipt with data: ${JSON.stringify({
-        userId: receiptData.userId.toString(),
-        paidRoomId: receiptData.paidRoomId.toString(),
-        roomId: receiptData.roomId.toString(),
-        stripePaymentIntentId: receiptData.stripePaymentIntentId,
-        stripeSessionId: receiptData.stripeSessionId,
-        tierTitle: receiptData.tierTitle,
-        tierType: receiptData.tierType,
-        quantity: receiptData.quantity,
-        unitPrice: receiptData.unitPrice,
-        totalAmount: receiptData.totalAmount,
-        status: receiptData.status,
-      })}`);
 
       const createdReceipt = await Receipts.create(receiptData);
       Logging.log(`Receipt created successfully in 'receipts' collection. Receipt ID: ${createdReceipt._id}, User: ${userId}, Room: ${roomId}`);

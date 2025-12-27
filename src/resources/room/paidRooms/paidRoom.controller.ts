@@ -39,45 +39,45 @@ class PaidRoomController implements Controller {
       `${this.path}/rooms/:userId`,
       RequiredAuth,
       creatorPermissions,
-      this.createNewPaidRoom,
+      this.createNewPaidRoom
     );
     this.router.post(
       `${this.path}/rooms/:userId/:roomId/checkout`,
       RequiredAuth,
       isUserAccount,
-      this.startCheckout,
+      this.startCheckout
     );
     this.router.get(
       `/creator/:userId/stripe/login-link`,
       RequiredAuth,
       isUserAccount,
-      this.getCreatorStripeLoginLink,
+      this.getCreatorStripeLoginLink
     );
     this.router.get(
       `/creator/:userId/stripe/balance`,
       RequiredAuth,
       isUserAccount,
-      this.getCreatorStripeBalance,
+      this.getCreatorStripeBalance
     );
     this.router.post(
       `/creator/:userId/stripe/payout`,
       RequiredAuth,
       isUserAccount,
-      this.createCreatorPayout,
+      this.createCreatorPayout
     );
     this.router.patch(
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
-      this.updatePaidRoom,
+      this.updatePaidRoom
     );
     this.router.post(
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
-      this.addTickets,
+      this.addTickets
     );
     this.router.get(
       `${this.path}/rooms/:userId/:roomId`,
@@ -85,42 +85,39 @@ class PaidRoomController implements Controller {
       isUserAccount,
       RequiredPaidRoomEntry,
       roomAdminPermissions,
-      this.getPaidRoom,
+      this.getPaidRoom
     );
     this.router.post(
       `${this.path}/return/rooms/:userId/:roomId`,
       RequiredAuth,
       RequiredPaidRoomEntry,
       isUserAccount,
-      this.returnPaidRoom,
+      this.returnPaidRoom
     );
     this.router.delete(
       `${this.path}/rooms/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
       roomAdminPermissions,
-      this.deletePaidRoom,
+      this.deletePaidRoom
     );
     this.router.post(
       `${this.path}/vault/card/:userId/:roomId`,
       RequiredAuth,
       isUserAccount,
-      this.vaultCard,
-    );
-    this.router.get(
-      `${this.path}/rooms/:userId/:roomId/tax-estimate`,
-      this.getTaxEstimate,
+      this.vaultCard
     );
   }
   private startCheckout = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
-      const userId = req.user?._id;
+      // const userId = req.user?._id;
       const { roomId } = req.params;
       const { quantity = 1, tierName, successUrl, cancelUrl } = req.body;
+      const userId = "693a6ec81a2c471b5beec1f2"
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       if (!roomId)
         return res.status(400).json({ message: "Room ID is required" });
@@ -216,7 +213,7 @@ class PaidRoomController implements Controller {
   private getCreatorStripeLoginLink = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
@@ -238,7 +235,7 @@ class PaidRoomController implements Controller {
   private createCreatorPayout = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
@@ -314,7 +311,7 @@ class PaidRoomController implements Controller {
   private createNewPaidRoom = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const userId = req.user?._id;
@@ -399,7 +396,7 @@ class PaidRoomController implements Controller {
   private getPaidRoom = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId } = req.params;
@@ -420,7 +417,7 @@ class PaidRoomController implements Controller {
   private vaultCard = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId, userId } = req.params;
@@ -445,7 +442,7 @@ class PaidRoomController implements Controller {
   private addTickets = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId } = req.params;
@@ -464,7 +461,7 @@ class PaidRoomController implements Controller {
   private returnPaidRoom = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId, userId } = req.params;
@@ -482,7 +479,7 @@ class PaidRoomController implements Controller {
   private purchaseTickets = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId, userId } = req.params;
@@ -533,7 +530,7 @@ class PaidRoomController implements Controller {
   private updatePaidRoom = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId } = req.params;
@@ -552,7 +549,7 @@ class PaidRoomController implements Controller {
   private deletePaidRoom = async (
     req: Request,
     res: Response,
-    next: NextFunction,
+    next: NextFunction
   ): Promise<Response | void> => {
     try {
       const { roomId } = req.params;
@@ -563,84 +560,6 @@ class PaidRoomController implements Controller {
         return res.status(400).send("Paid room not deleted");
 
       res.status(200).send(deletedPaidRoom);
-    } catch (err: any) {
-      return next(new HttpException(400, err.message));
-    }
-  };
-
-  private getTaxEstimate = async (
-    req: Request,
-    res: Response,
-    next: NextFunction,
-  ): Promise<Response | void> => {
-    try {
-      const { roomId } = req.params;
-      const { tierName, quantity = 1, country, postalCode, state } = req.query;
-
-      if (!roomId) {
-        return res.status(400).json({ message: "Room ID is required" });
-      }
-
-      if (!tierName || typeof tierName !== "string" || !tierName.trim()) {
-        return res.status(400).json({ message: "tierName is required" });
-      }
-
-      const quantityNum = parseInt(String(quantity), 10);
-      if (isNaN(quantityNum) || quantityNum < 1) {
-        return res
-          .status(400)
-          .json({ message: "quantity must be a positive number" });
-      }
-
-      const paidRoom = await getPaidRoom(roomId);
-      if (!paidRoom) {
-        return res.status(404).json({ message: "Paid room not found" });
-      }
-
-      const tiers = paidRoom.tickets.pricing || [];
-      if (!tiers || tiers.length === 0) {
-        return res.status(404).json({ message: "No tiers set for this room" });
-      }
-
-      const normalizedTier = String(tierName).trim().toLowerCase();
-      const selected = tiers.find((t: any) => {
-        const title = String(t.title || "")
-          .trim()
-          .toLowerCase();
-        const tierEnum = String(t.tiers || "")
-          .trim()
-          .toLowerCase();
-        return title === normalizedTier || tierEnum === normalizedTier;
-      });
-
-      if (!selected) {
-        return res.status(400).json({ message: "Tier not found" });
-      }
-
-      const ticketAmount = selected.price;
-
-      const estimateParams: any = {
-        amount: ticketAmount,
-        quantity: quantityNum,
-        currency: "usd",
-      };
-
-      if (country && typeof country === "string") {
-        estimateParams.country = country;
-      }
-      if (postalCode && typeof postalCode === "string") {
-        estimateParams.postalCode = postalCode;
-      }
-      if (state && typeof state === "string") {
-        estimateParams.state = state;
-      }
-
-      const estimate = await StripeService.calculateTaxEstimate(estimateParams);
-
-      return res.status(200).json({
-        success: true,
-        estimate,
-      });
     } catch (err: any) {
       return next(new HttpException(400, err.message));
     }
