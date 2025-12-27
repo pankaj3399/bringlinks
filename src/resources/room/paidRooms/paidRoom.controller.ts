@@ -35,6 +35,11 @@ class PaidRoomController implements Controller {
   }
 
   private initializeRoutes(): void {
+    // Tax estimate route must come first to avoid matching /purchase/rooms/:userId
+    this.router.post(
+      `${this.path}/rooms/:roomId/tax-estimate`,
+      this.getTaxEstimate
+    );
     this.router.post(
       `${this.path}/rooms/:userId`,
       RequiredAuth,
@@ -559,6 +564,84 @@ class PaidRoomController implements Controller {
         return res.status(400).send("Paid room not deleted");
 
       res.status(200).send(deletedPaidRoom);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private getTaxEstimate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      const { tierName, quantity = 1, country, postalCode, state } = req.body;
+
+      if (!roomId) {
+        return res.status(400).json({ message: "Room ID is required" });
+      }
+
+      if (!tierName || typeof tierName !== "string" || !tierName.trim()) {
+        return res.status(400).json({ message: "tierName is required" });
+      }
+
+      const quantityNum = parseInt(String(quantity), 10);
+      if (isNaN(quantityNum) || quantityNum < 1) {
+        return res
+          .status(400)
+          .json({ message: "quantity must be a positive number" });
+      }
+
+      const paidRoom = await getPaidRoom(roomId);
+      if (!paidRoom) {
+        return res.status(404).json({ message: "Paid room not found" });
+      }
+
+      const tiers = paidRoom.tickets.pricing || [];
+      if (!tiers || tiers.length === 0) {
+        return res.status(404).json({ message: "No tiers set for this room" });
+      }
+
+      const normalizedTier = String(tierName).trim().toLowerCase();
+      const selected = tiers.find((t: any) => {
+        const title = String(t.title || "")
+          .trim()
+          .toLowerCase();
+        const tierEnum = String(t.tiers || "")
+          .trim()
+          .toLowerCase();
+        return title === normalizedTier || tierEnum === normalizedTier;
+      });
+
+      if (!selected) {
+        return res.status(400).json({ message: "Tier not found" });
+      }
+
+      const ticketAmount = selected.price;
+
+      const estimateParams: any = {
+        amount: ticketAmount,
+        quantity: quantityNum,
+        currency: "usd",
+      };
+
+      if (country && typeof country === "string") {
+        estimateParams.country = country;
+      }
+      if (postalCode && typeof postalCode === "string") {
+        estimateParams.postalCode = postalCode;
+      }
+      if (state && typeof state === "string") {
+        estimateParams.state = state;
+      }
+
+      const estimate = await StripeService.calculateTaxEstimate(estimateParams);
+
+      return res.status(200).json({
+        success: true,
+        estimate,
+      });
     } catch (err: any) {
       return next(new HttpException(400, err.message));
     }
