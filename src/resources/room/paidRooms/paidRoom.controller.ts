@@ -114,10 +114,9 @@ class PaidRoomController implements Controller {
     next: NextFunction
   ): Promise<Response | void> => {
     try {
-      // const userId = req.user?._id;
+      const userId = req.user?._id;
       const { roomId } = req.params;
       const { quantity = 1, tierName, successUrl, cancelUrl } = req.body;
-      const userId = "693a6ec81a2c471b5beec1f2"
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
       if (!roomId)
         return res.status(400).json({ message: "Room ID is required" });
