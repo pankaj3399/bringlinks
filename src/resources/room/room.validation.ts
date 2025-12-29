@@ -72,6 +72,11 @@ const editARoom = Joi.object().keys({
       .required(),
     country: Joi.string().required(),
   }),
+  event_location: Joi.object<CurrentLo>().keys({
+    type: Joi.string().optional(),
+    coordinates: Joi.array<number>().max(2).required(),
+    venue: Joi.string().optional(),
+  }),
   event_flyer_img: Joi.object<IMGNames>().keys({
     name: Joi.string<string>().required(),
   }),

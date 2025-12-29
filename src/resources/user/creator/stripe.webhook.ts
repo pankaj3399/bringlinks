@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import Stripe from "stripe";
-import crypto from "crypto";
 import { validateEnv } from "../../../../config/validateEnv";
 import Creator from "./creator.model";
 import Logging from "../../../library/logging";
@@ -12,7 +11,6 @@ import Receipts from "../../room/receipts/receipts.model";
 import { PaymentStatus } from "../../room/receipts/receipts.interface";
 import mongoose from "mongoose";
 import emailService from "../../../utils/email/email.service";
-import StripeService from "../../../utils/stripe/stripe.service";
 
 const stripeApiKey = validateEnv.STRIPE_SECRET_KEY;
 if (!stripeApiKey) {
@@ -33,7 +31,7 @@ router.post("/", async (req: Request, res: Response) => {
     Logging.error("STRIPE_WEBHOOK_SECRET is not set");
     return res.status(500).json({ error: "Webhook secret not configured" });
   }
-  
+
   if (!sig) {
     Logging.error("Stripe signature header is missing");
     return res.status(400).json({ error: "Missing stripe-signature header" });
@@ -45,11 +43,12 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     if (!Buffer.isBuffer(rawBody)) {
-      return res.status(400).json({ 
-        error: "Invalid request body format. Raw body required for signature verification." 
+      return res.status(400).json({
+        error:
+          "Invalid request body format. Raw body required for signature verification.",
       });
     }
-    
+
     event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
   } catch (err: any) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -182,17 +181,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       return;
     }
 
-    const pricing = paidRoom.tickets?.pricing || [] as any[];
-    const idx = pricing.findIndex((p: any) => p.title === tierTitle || p.tiers === tierTitle);
+    const pricing = paidRoom.tickets?.pricing || ([] as any[]);
+    const idx = pricing.findIndex(
+      (p: any) => p.title === tierTitle || p.tiers === tierTitle
+    );
     const target = idx >= 0 ? pricing[idx] : pricing[0];
     if (target) {
       target.sold += quantity;
       target.available = Math.max(0, target.available - quantity);
     }
     paidRoom.tickets.totalSold += quantity;
-    paidRoom.tickets.totalTicketsAvailable = Math.max(0, paidRoom.tickets.totalTicketsAvailable - quantity);
+    paidRoom.tickets.totalTicketsAvailable = Math.max(
+      0,
+      paidRoom.tickets.totalTicketsAvailable - quantity
+    );
     if (!paidRoom.tickets.receiptId) paidRoom.tickets.receiptId = [] as any;
-    const pi = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
+    const pi =
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id;
     if (pi) (paidRoom.tickets.receiptId as any).push(pi);
     if (!paidRoom.tickets.paidUsers) paidRoom.tickets.paidUsers = [] as any;
     (paidRoom.tickets.paidUsers as any).push(userId);
@@ -201,19 +208,29 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     let ticketId = `ticket_${session.id}_${Date.now()}`;
     let entryQRCode = "";
+    let entryQRCodeImageBase64 = "";
 
     try {
-      entryQRCode = await createEntryQRCode(roomId, userId, ticketId);
-      Logging.log(`Entry QR code generated for user ${userId} for room ${roomId}`);
+      const [qrCode, qrCodeImageBase64] = await createEntryQRCode(
+        roomId,
+        userId,
+        ticketId
+      );
+      entryQRCode = qrCode as string;
+      entryQRCodeImageBase64 = qrCodeImageBase64 as string;
+      Logging.log(
+        `Entry QR code generated for user ${userId} for room ${roomId}`
+      );
     } catch (qrError: any) {
       Logging.error(`Entry QR code generation error: ${qrError.message}`);
     }
 
     try {
-      const paymentIntentId = typeof fullSession.payment_intent === "string" 
-        ? fullSession.payment_intent 
-        : fullSession.payment_intent?.id || "";
-      
+      const paymentIntentId =
+        typeof fullSession.payment_intent === "string"
+          ? fullSession.payment_intent
+          : fullSession.payment_intent?.id || "";
+
       if (!paymentIntentId) {
         Logging.error(`Payment intent ID not found for session ${session.id}`);
         return;
@@ -223,20 +240,29 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       const totalAmount = (fullSession.amount_total || 0) / 100;
       const taxAmount = Math.max(0, totalAmount - subtotal);
 
-      const breakdown = (fullSession.total_details?.breakdown as any);
+      const breakdown = fullSession.total_details?.breakdown as any;
       let taxBreakdown: any[] = [];
-      
-      if (breakdown?.taxes && Array.isArray(breakdown.taxes) && breakdown.taxes.length > 0) {
+
+      if (
+        breakdown?.taxes &&
+        Array.isArray(breakdown.taxes) &&
+        breakdown.taxes.length > 0
+      ) {
         taxBreakdown = breakdown.taxes
           .map((tax: any) => {
             let taxRate = 0;
             if (tax.rate !== null && tax.rate !== undefined) {
-              if (typeof tax.rate === 'object' && tax.rate !== null) {
-                const percentage = tax.rate.effective_percentage ?? tax.rate.percentage;
-                if (percentage !== null && percentage !== undefined && !isNaN(percentage)) {
+              if (typeof tax.rate === "object" && tax.rate !== null) {
+                const percentage =
+                  tax.rate.effective_percentage ?? tax.rate.percentage;
+                if (
+                  percentage !== null &&
+                  percentage !== undefined &&
+                  !isNaN(percentage)
+                ) {
                   taxRate = percentage / 100;
                 }
-              } else if (typeof tax.rate === 'number') {
+              } else if (typeof tax.rate === "number") {
                 if (!isNaN(tax.rate)) {
                   taxRate = tax.rate / 10000;
                 }
@@ -247,24 +273,38 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
                 }
               }
             }
-            
+
             let taxAmountValue = 0;
             if (tax.amount !== null && tax.amount !== undefined) {
-              const amountValue = typeof tax.amount === 'number' ? tax.amount : parseFloat(tax.amount);
+              const amountValue =
+                typeof tax.amount === "number"
+                  ? tax.amount
+                  : parseFloat(tax.amount);
               if (!isNaN(amountValue)) {
                 taxAmountValue = amountValue / 100;
               }
             }
-            
+
             let jurisdiction = "Unknown";
-            if (tax.rate && typeof tax.rate === 'object' && tax.rate.jurisdiction) {
+            if (
+              tax.rate &&
+              typeof tax.rate === "object" &&
+              tax.rate.jurisdiction
+            ) {
               jurisdiction = tax.rate.jurisdiction;
-            } else if (tax.rate && typeof tax.rate === 'object' && tax.rate.country) {
+            } else if (
+              tax.rate &&
+              typeof tax.rate === "object" &&
+              tax.rate.country
+            ) {
               jurisdiction = tax.rate.country;
             } else if (tax.jurisdiction) {
-              jurisdiction = typeof tax.jurisdiction === 'string' ? tax.jurisdiction : tax.jurisdiction.country || "Unknown";
+              jurisdiction =
+                typeof tax.jurisdiction === "string"
+                  ? tax.jurisdiction
+                  : tax.jurisdiction.country || "Unknown";
             }
-            
+
             return {
               amount: taxAmountValue,
               rate: taxRate,
@@ -275,9 +315,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           .filter((tax: any) => tax.amount > 0 || tax.rate > 0);
       } else {
         if (taxAmount > 0) {
-          Logging.error(`Tax amount exists (${taxAmount}) but tax breakdown is empty. Full breakdown: ${JSON.stringify(breakdown)}`);
+          Logging.error(
+            `Tax amount exists (${taxAmount}) but tax breakdown is empty. Full breakdown: ${JSON.stringify(
+              breakdown
+            )}`
+          );
         } else {
-          Logging.error(`No tax amount calculated. Subtotal: ${subtotal}, Total: ${totalAmount}`);
+          Logging.error(
+            `No tax amount calculated. Subtotal: ${subtotal}, Total: ${totalAmount}`
+          );
         }
       }
 
@@ -301,8 +347,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       };
 
       const createdReceipt = await Receipts.create(receiptData);
-      Logging.log(`Receipt created successfully in 'receipts' collection. Receipt ID: ${createdReceipt._id}, User: ${userId}, Room: ${roomId}`);
-      
+      Logging.log(
+        `Receipt created successfully in 'receipts' collection. Receipt ID: ${createdReceipt._id}, User: ${userId}, Room: ${roomId}`
+      );
+
       // Add user to the Room's entered_id array
       try {
         const updatedRoom = await Rooms.findByIdAndUpdate(
@@ -310,13 +358,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           { $addToSet: { entered_id: new mongoose.Types.ObjectId(userId) } },
           { new: true }
         );
-        
+
         if (updatedRoom) {
           // Send receipt email
           try {
             await emailService.sendReceiptEmail({
               paymentIntentId: paymentIntentId,
-              receiverEmail: fullSession.customer_email || fullSession.customer_details?.email || "",
+              receiverEmail:
+                fullSession.customer_email ||
+                fullSession.customer_details?.email ||
+                "",
               roomName: updatedRoom.event_name || "",
               roomType: updatedRoom.event_type
                 ? updatedRoom.event_type
@@ -327,11 +378,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
                 updatedRoom.event_location_address?.address_line2
                   ? `, ${updatedRoom.event_location_address.address_line2}`
                   : ""
-              }${updatedRoom.event_location_address?.city ? `, ${updatedRoom.event_location_address.city}` : ""}${
+              }${
+                updatedRoom.event_location_address?.city
+                  ? `, ${updatedRoom.event_location_address.city}`
+                  : ""
+              }${
                 updatedRoom.event_location_address?.state
                   ? `, ${updatedRoom.event_location_address.state}`
                   : ""
-              }${updatedRoom.event_location_address?.zipcode ? `, ${updatedRoom.event_location_address.zipcode}` : ""}${
+              }${
+                updatedRoom.event_location_address?.zipcode
+                  ? `, ${updatedRoom.event_location_address.zipcode}`
+                  : ""
+              }${
                 updatedRoom.event_location_address?.country
                   ? `, ${updatedRoom.event_location_address.country}`
                   : ""
@@ -345,10 +404,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               roomPrice: target?.price || 0,
               roomQuantity: quantity,
               totalAmount: totalAmount,
-              entryQRCode: entryQRCode,
+              entryQRCode: entryQRCodeImageBase64,
             });
-            
-            Logging.log(`Receipt email sent to ${fullSession.customer_email || fullSession.customer_details?.email}`);
+
+            Logging.log(
+              `Receipt email sent to ${
+                fullSession.customer_email ||
+                fullSession.customer_details?.email
+              }`
+            );
           } catch (emailError: any) {
             Logging.error(`Receipt email error: ${emailError.message}`);
           }
@@ -358,12 +422,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       } catch (roomUpdateError: any) {
         Logging.error(`Room update error: ${roomUpdateError.message}`);
       }
-      
     } catch (receiptError: any) {
       Logging.error(`Receipt creation error: ${receiptError.message}`);
       Logging.error(`Receipt creation error stack: ${receiptError.stack}`);
       if (receiptError.errors) {
-        Logging.error(`Receipt validation errors: ${JSON.stringify(receiptError.errors)}`);
+        Logging.error(
+          `Receipt validation errors: ${JSON.stringify(receiptError.errors)}`
+        );
       }
     }
   } catch (error: any) {

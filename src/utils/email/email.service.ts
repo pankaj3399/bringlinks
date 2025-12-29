@@ -156,7 +156,7 @@ class EmailService {
     }
     const subject = "BLU Signup Code Request Reply";
     const lines: string[] = [];
-
+    var html = "";
     if (status === "approved") {
       lines.push(
         `Hello ${name}, We have received your request for a signup code.`
@@ -168,6 +168,30 @@ class EmailService {
       lines.push("");
       lines.push("Reason:");
       lines.push(message);
+      html = `
+        <h2><strong>Hello ${name},</strong></h2>
+
+        <p>
+          We have received your request for a signup code.
+        </p>
+
+        <p>
+          We have <strong>${status}</strong> the email:
+          <strong>${email}</strong> for entry.
+        </p>
+
+        <p>
+          Please use the following code to sign up:
+        </p>
+
+        <p style="font-size:18px; font-weight:bold; letter-spacing:1px;">
+          ${code}
+        </p>
+
+        <p><strong>Reason:</strong></p>
+
+        <p>${message}</p>
+`;
     } else if (status === "rejected") {
       lines.push(
         `Hello ${name}, We have received your request for a signup code.`
@@ -179,6 +203,24 @@ class EmailService {
       lines.push("");
       lines.push("Reason:");
       lines.push(message);
+
+      html = `
+      <h2><strong>Hello ${name},</strong></h2>
+
+      <p>
+      We have received your request for a signup code.
+      </p>
+
+      <p>
+      We apologize for the inconvenience. We have
+      <strong>${status}</strong> the email:
+      <strong>${email}</strong> for entry.
+      </p>
+
+      <p><strong>Reason:</strong></p>
+
+      <p>${message}</p>
+      `;
     }
 
     const msg = {
@@ -186,6 +228,7 @@ class EmailService {
       from: adminEmail,
       subject,
       text: lines.join("\n"),
+      html,
     } as any;
     try {
       await this.sgMail.send(msg);
@@ -232,22 +275,63 @@ class EmailService {
     } = email;
 
     const emailFrom = (validateEnv as any).EMAIL_FROM as string;
-    const subject = "Receipt";
+    const subject = `**${roomName} - Receipt**`;
+    const appleMapsLink = `https://maps.apple.com/?q=${encodeURIComponent(
+      roomLocation
+    )}`;
+
+    const html = `
+      <h2><em>Hello ${receiverEmail},</em></h2>
+
+      <p>Thank you for your purchase. Your receipt is attached below.</p>
+
+      <p>
+        <strong>Your Entry QR Code:</strong> <img src="data:image/png;base64,${entryQRCode}" alt="Entry QR Code" /><br/>
+        <strong>Your Receipt:</strong> ${paymentIntentId}
+      </p>
+
+      <p>
+        <strong>Room Name:</strong> ${roomName}<br/>
+        <strong>Room Type:</strong> ${roomType}
+      </p>
+
+      <p>
+        <strong>Room Date:</strong> ${roomDate}<br/>
+        <strong>Room Time:</strong> ${roomTime}<br/>
+        <strong>Room Location:</strong>
+        <a href="${appleMapsLink}" target="_blank">Open in Apple Maps</a>
+      </p>
+
+      <p>
+        <strong>Room Price:</strong> ${roomPrice}<br/>
+        <strong>Room Quantity:</strong> ${roomQuantity}
+      </p>
+
+      <p><strong>Total Amount:</strong> ${totalAmount}</p>
+
+      <p>Thank you for your purchase.</p>
+`;
 
     const lines: string[] = [];
-    lines.push(`Hello ${receiverEmail},`);
+    lines.push("");
+    // make hello italic markdown
+    lines.push(`**Hello ${receiverEmail},**`);
     lines.push("");
     lines.push(`Thank you for your purchase. Your receipt is attached below.`);
     lines.push("");
-    lines.push(`Your Entry QR Code: ${entryQRCode}`);
+    lines.push(
+      `Your Entry QR Code: <img src="data:image/png;base64,${entryQRCode}" alt="Entry QR Code" />`
+    );
     lines.push(`Your Receipt: ${paymentIntentId}`);
     lines.push("");
-    lines.push(`Room: ${roomName}`);
-    lines.push(`Room Type: ${roomType}`);
+    // make room name bold markdown
+    lines.push(`**Room Name:** ${roomName}`);
+    lines.push(`**Room Type:** ${roomType}`);
     lines.push("");
-    lines.push(`Room Location: ${roomLocation}`);
+    // make room location clickable with apple maps link
     lines.push(`Room Date: ${roomDate}`);
     lines.push(`Room Time: ${roomTime}`);
+    lines.push(`Room Location: ${appleMapsLink}`);
     lines.push("");
     lines.push(`Room Price: ${roomPrice}`);
     lines.push(`Room Quantity: ${roomQuantity}`);
@@ -259,7 +343,9 @@ class EmailService {
       from: emailFrom,
       subject,
       text: lines.join("\n"),
+      html,
     } as any;
+
     try {
       await this.sgMail.send(msg);
       Logging.log("Receipt email sent");

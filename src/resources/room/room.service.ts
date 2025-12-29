@@ -742,9 +742,16 @@ const createEntryQRCode = async (
     const entryUrl = `${validateEnv.FRONTEND_URL}/entry/${roomId}?user=${userId}&ticket=${generatedTicketId}`;
 
     const qrCode = await QRCode.toDataURL(entryUrl);
-    if (!qrCode) throw new Error("Entry QR code not created");
+    // Generate QR code image as PNG buffer and convert to base64 string
+    let qrCodeImageBase64: string;
 
-    return qrCode;
+    const qrCodeBuffer = await QRCode.toBuffer(entryUrl, { type: "png" });
+    qrCodeImageBase64 = qrCodeBuffer.toString("base64");
+
+    if (!qrCode) throw new Error("Entry QR code not created");
+    if (!qrCodeImageBase64) throw new Error("Entry QR code image not created");
+
+    return [qrCode, qrCodeImageBase64];
   } catch (err: any) {
     Logging.error(err);
     throw err;
@@ -908,10 +915,38 @@ const deleteRoom = async (user_id: string, room_id: string) => {
 
 const updateRoom = async (room: Partial<IRoomsDocument>, room_id: string) => {
   try {
+    const parseDdmmyyyy = (v?: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const s = String(v).trim();
+      // Accept DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY
+      const m = s.match(
+        /^([0]?[1-9]|[1|2][0-9]|3[0|1])[./-]([0]?[1-9]|1[0-2])[./-]([0-9]{4}|[0-9]{2})$/
+      );
+      if (m) {
+        const d = parseInt(m[1], 10);
+        const mo = parseInt(m[2], 10) - 1; // zero-based
+        const y = parseInt(m[3].length === 2 ? `20${m[3]}` : m[3], 10);
+        return new Date(Date.UTC(y, mo, d, 0, 0, 0));
+      }
+      // Fallback: let Date try to parse ISO or millis
+      const dt = new Date(s);
+      return isNaN(dt.getTime()) ? undefined : dt;
+    };
+
     const updateData: Partial<IRoomsDocument> = { ...room };
 
     if (!room.event_typeOther) {
       updateData.event_typeOther = null;
+    }
+
+    // Parse date strings to Date objects if event_schedule is provided
+    if (room.event_schedule) {
+      updateData.event_schedule = {
+        startDate: parseDdmmyyyy(
+          (room as any).event_schedule?.startDate
+        ) as any,
+        endDate: parseDdmmyyyy((room as any).event_schedule?.endDate) as any,
+      } as any;
     }
 
     const updatedRoom = await Rooms.findByIdAndUpdate(
@@ -1132,6 +1167,25 @@ export const roomsGetallPaginated = async (skip: number, limit: number) => {
   }
 };
 
+export const getAttendees = async (roomId: string) => {
+  try {
+    const roomIdString = roomId as string;
+    const attendees = await Rooms.find({
+      _id: roomIdString,
+    }).populate([
+      {
+        path: "entered_id",
+        model: "User",
+        select: "_id auth.username profile.firstName profile.avi",
+      },
+    ]);
+    if (!attendees) throw new Error("Attendees not found");
+    return attendees;
+  } catch (err: any) {
+    Logging.error(err);
+    throw err;
+  }
+};
 export const getAllUserEnteredRooms = async (userId: string) => {
   try {
     const userIdString = userId as string;

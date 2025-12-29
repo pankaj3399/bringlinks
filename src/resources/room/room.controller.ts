@@ -43,6 +43,7 @@ import {
   filterRooms,
   getRoomAdmins,
   getRoomAdminsByUserId,
+  getAttendees,
 } from "./room.service";
 import {
   generateShareLinks,
@@ -236,6 +237,12 @@ class RoomController implements Controller {
       roomAdminPermissions,
       validationMiddleware(validate.addSponsor),
       this.addSponsor
+    );
+    this.router.get(
+      `${this.path}/attendees/:userId/:roomId`,
+      RequiredAuth,
+      isUserAccount,
+      this.getAttendees
     );
     this.router.get(
       `${this.path}/entered/:userId/:roomId`,
@@ -1252,6 +1259,34 @@ class RoomController implements Controller {
         return res.status(400).send({ message: "Sponsor not added" });
 
       res.status(201).send(addedGuest);
+    } catch (err: any) {
+      return next(new HttpException(400, err.message));
+    }
+  };
+
+  private getAttendees = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<Response | void> => {
+    try {
+      const { roomId } = req.params;
+      if (!roomId)
+        return res.status(400).send("User ID and room ID are required");
+
+      const attendees = await getAttendees(roomId);
+
+      if (!attendees || attendees.length === 0)
+        return res.status(204).send({
+          success: false,
+          message: "No attendees found",
+          attendees: [],
+        });
+
+      res.status(200).json({
+        success: true,
+        attendees,
+      });
     } catch (err: any) {
       return next(new HttpException(400, err.message));
     }
