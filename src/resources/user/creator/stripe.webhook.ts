@@ -191,18 +191,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
     paidRoom.tickets.totalSold += quantity;
     paidRoom.tickets.totalTicketsAvailable = Math.max(0, paidRoom.tickets.totalTicketsAvailable - quantity);
-    
-    // Calculate and update totalRevenue
-    paidRoom.tickets.totalRevenue = Array.isArray(paidRoom.tickets.pricing)
-      ? paidRoom.tickets.pricing.reduce((acc: number, curr: any) => {
-          const price = Number(curr?.price ?? 0);
-          const sold = Number(curr?.sold ?? 0);
-          if (!Number.isFinite(price) || !Number.isFinite(sold))
-            return acc;
-          return acc + price * sold;
-        }, 0)
-      : 0;
-    
     if (!paidRoom.tickets.receiptId) paidRoom.tickets.receiptId = [] as any;
     const pi = typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id;
     if (pi) (paidRoom.tickets.receiptId as any).push(pi);

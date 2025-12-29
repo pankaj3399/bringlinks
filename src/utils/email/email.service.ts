@@ -239,6 +239,7 @@ class EmailService {
     lines.push("");
     lines.push(`Thank you for your purchase. Your receipt is attached below.`);
     lines.push("");
+    lines.push(`Your Entry QR Code: ${entryQRCode}`);
     lines.push(`Your Receipt: ${paymentIntentId}`);
     lines.push("");
     lines.push(`Room: ${roomName}`);
@@ -253,34 +254,12 @@ class EmailService {
     lines.push("");
     lines.push(`Total Amount: ${totalAmount}`);
 
-    const msg: any = {
+    const msg = {
       to: receiverEmail,
       from: emailFrom,
       subject,
       text: lines.join("\n"),
-    };
-
-    // Extract base64 data from entryQRCode and attach as PNG file
-    try {
-      if (entryQRCode && entryQRCode.startsWith("data:image/png;base64,")) {
-        const base64Data = entryQRCode.replace("data:image/png;base64,", "");
-        msg.attachments = [
-          {
-            content: base64Data,
-            filename: "entry-qr-code.png",
-            type: "image/png",
-            disposition: "attachment",
-          },
-        ];
-      }
-    } catch (error: any) {
-      Logging.error({
-        hint: "Failed to parse QR code for attachment",
-        error: error.message,
-      });
-      // Continue without attachment if parsing fails
-    }
-
+    } as any;
     try {
       await this.sgMail.send(msg);
       Logging.log("Receipt email sent");
